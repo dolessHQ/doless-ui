@@ -1,77 +1,67 @@
 {
   "$schema": "https://ui.shadcn.com/schema/registry.json",
-  "name": "acme",
-  "homepage": "https://acme.com",
+  "name": "doless",
+  "homepage": "https://doless-ui.vercel.app/",
   "items": [
     {
-      "name": "hello-world",
+      "name": "color-picker-popover",
       "type": "registry:component",
-      "title": "Hello World",
-      "description": "A simple hello world component",
-      "registryDependencies": ["button"],
+      "title": "Color Picker Popover",
+      "description": "Popover color picker with preset swatches and custom input.",
+      "registryDependencies": ["input", "popover"],
       "files": [
         {
-          "path": "registry/new-york/blocks/hello-world/hello-world.tsx",
+          "path": "registry/new-york/doless/ColorPickerPopover.tsx",
           "type": "registry:component"
         }
       ]
     },
     {
-      "name": "example-form",
+      "name": "date-picker",
       "type": "registry:component",
-      "title": "Example Form",
-      "description": "A contact form with Zod validation.",
-      "dependencies": ["zod"],
-      "registryDependencies": ["button", "input", "label", "textarea", "card"],
+      "title": "Date Picker",
+      "description": "Single date picker with optional clear action and bounds.",
+      "dependencies": ["date-fns", "lucide-react", "react-day-picker"],
+      "registryDependencies": ["button", "calendar", "label", "popover"],
       "files": [
         {
-          "path": "registry/new-york/blocks/example-form/example-form.tsx",
+          "path": "registry/new-york/doless/DatePicker.tsx",
           "type": "registry:component"
         }
       ]
     },
     {
-      "name": "complex-component",
+      "name": "date-range-picker",
       "type": "registry:component",
-      "title": "Complex Component",
-      "description": "A complex component showing hooks, libs and components.",
-      "registryDependencies": ["card"],
+      "title": "Date Range Picker",
+      "description": "Range picker with before/after modes, presets, and clear action.",
+      "dependencies": ["date-fns", "lucide-react", "react-day-picker"],
+      "registryDependencies": [
+        "button",
+        "calendar",
+        "card",
+        "label",
+        "popover",
+        "separator",
+        "toggle-group"
+      ],
       "files": [
         {
-          "path": "registry/new-york/blocks/complex-component/page.tsx",
-          "type": "registry:page",
-          "target": "app/pokemon/page.tsx"
-        },
-        {
-          "path": "registry/new-york/blocks/complex-component/components/pokemon-card.tsx",
+          "path": "registry/new-york/doless/DateRangePicker.tsx",
           "type": "registry:component"
-        },
-        {
-          "path": "registry/new-york/blocks/complex-component/components/pokemon-image.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "registry/new-york/blocks/complex-component/lib/pokemon.ts",
-          "type": "registry:lib"
-        },
-        {
-          "path": "registry/new-york/blocks/complex-component/hooks/use-pokemon.ts",
-          "type": "registry:hook"
         }
       ]
     },
     {
-      "name": "example-with-css",
+      "name": "multi-date-picker",
       "type": "registry:component",
-      "title": "Example with CSS",
-      "description": "A login form with a CSS file.",
+      "title": "Multi Date Picker",
+      "description": "Multi-select date picker with removable date badges and an optional max.",
+      "dependencies": ["date-fns", "lucide-react", "react-day-picker"],
+      "registryDependencies": ["badge", "button", "calendar", "label", "popover"],
       "files": [
         {
-          "path": "registry/new-york/blocks/example-with-css/example-card.tsx",
-          "type": "registry:component"
-        },
-        {
-          "path": "registry/new-york/blocks/example-with-css/example-card.css",
+          "path": "registry/new-york/doless/MultiDatePicker.tsx",
           "type": "registry:component"
         }
       ]

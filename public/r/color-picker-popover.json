@@ -1,0 +1,18 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "color-picker-popover",
+  "title": "Color Picker Popover",
+  "description": "Popover color picker with preset swatches and custom input.",
+  "registryDependencies": [
+    "input",
+    "popover"
+  ],
+  "files": [
+    {
+      "path": "registry/new-york/doless/ColorPickerPopover.tsx",
+      "content": "\"use client\";\n\nimport { type ReactNode } from \"react\";\nimport { cn } from \"@/lib/utils\";\nimport { Input } from \"@/registry/new-york/ui/input\";\nimport { Popover, PopoverContent, PopoverTrigger } from \"@/registry/new-york/ui/popover\";\n\n// Default swatches used when presets are not provided.\nconst DEFAULT_PRESETS = [\n  \"#7c3aed\",\n  \"#22c55e\",\n  \"#f97316\",\n  \"#3b82f6\",\n  \"#f43f5e\",\n  \"#14b8a6\",\n  \"#a855f7\",\n  \"#eab308\",\n  \"#6366f1\",\n];\n\nexport interface ColorPickerPopoverProps {\n  value: string;\n  onChange: (next: string) => void;\n  label?: ReactNode;\n  presets?: string[];\n  children: ReactNode;\n  className?: string;\n}\n\nexport function ColorPickerPopover({\n  value,\n  onChange,\n  label,\n  presets = DEFAULT_PRESETS,\n  children,\n  className,\n}: ColorPickerPopoverProps) {\n  const handlePresetClick = (preset: string) => {\n    if (preset === value) return;\n    onChange(preset);\n  };\n\n  return (\n    <Popover>\n      <PopoverTrigger asChild>{children}</PopoverTrigger>\n      <PopoverContent className={cn(\"w-64 space-y-3\", className)}>\n        {label ? <p className=\"text-xs font-medium text-muted-foreground\">{label}</p> : null}\n        <div className=\"flex flex-wrap gap-2\">\n          {presets.map((preset) => (\n            <button\n              key={preset}\n              type=\"button\"\n              onClick={() => handlePresetClick(preset)}\n              className={cn(\n                \"h-7 w-7 rounded-full border transition hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2\",\n                value === preset && \"ring-2 ring-offset-2 ring-primary\",\n              )}\n              style={{ backgroundColor: preset }}\n              aria-label={`Set color ${preset}`}\n            />\n          ))}\n        </div>\n        <div className=\"flex items-center gap-2 text-xs text-muted-foreground\">\n          <span>Custom</span>\n          <Input\n            type=\"color\"\n            className=\"h-8 w-16 cursor-pointer p-1\"\n            value={value || \"#a3a3a3\"}\n            onChange={(event) => onChange(event.target.value)}\n          />\n        </div>\n      </PopoverContent>\n    </Popover>\n  );\n}\n",
+      "type": "registry:component"
+    }
+  ],
+  "type": "registry:component"
+}
