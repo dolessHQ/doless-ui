@@ -6,6 +6,7 @@ import { CalendarIcon, ChevronDownIcon, X } from "lucide-react"
 import type { Matcher } from "react-day-picker"
 
 import { cn } from "@/lib/utils"
+import { Card } from "@/registry/new-york/ui/card"
 import { Button } from "@/registry/new-york/ui/button"
 import { Calendar } from "@/registry/new-york/ui/calendar"
 import { Label } from "@/registry/new-york/ui/label"
@@ -308,72 +309,75 @@ export const MultiDatePicker = React.forwardRef<HTMLButtonElement, MultiDatePick
             align="start"
             sideOffset={4}
             className={cn(
-              "w-fit min-w-[280px] max-w-[min(320px,calc(100vw-2rem))] p-0",
+              "min-w-[340px] border-none bg-transparent p-0.5",
               calendarClassName
             )}
           >
-            <div className="p-3">
-              {selectedDates.length > 0 && (
-                <div className="mb-3 flex flex-wrap gap-2 max-w-full">
-                  {selectedDates
-                    .sort((a, b) => a.getTime() - b.getTime())
-                    .map((date) => (
-                      <Badge
-                        key={date.getTime()}
-                        variant="secondary"
-                        className="flex items-center gap-1 pr-1"
-                      >
-                        {format(date, dateFormat)}
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveDate(date)}
-                          className="ml-1 rounded-full hover:bg-destructive/20 p-0.5"
-                          disabled={disabled}
+            <Card className="border bg-background shadow-lg my-1 gap-0 py-0">
+              <div className="p-3">
+                {selectedDates.length > 0 && (
+                  <div className="mb-3 flex flex-wrap gap-2 max-w-full">
+                    {selectedDates
+                      .sort((a, b) => a.getTime() - b.getTime())
+                      .map((date) => (
+                        <Badge
+                          key={date.getTime()}
+                          variant="secondary"
+                          className="flex items-center gap-1 pr-1"
                         >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </Badge>
-                    ))}
-                </div>
-              )}
-              <Calendar
-                initialFocus
-                mode="single"
-                selected={undefined} // Don't show single selection highlight
-                onSelect={handleSelect}
-                numberOfMonths={numberOfMonths}
-                defaultMonth={defaultMonth}
-                captionLayout="dropdown"
-                disabled={combinedDisabled}
-                fromYear={fromYear}
-                toYear={toYear}
-                modifiers={{
-                  selected: (date) => selectedDates.some(d => d.getTime() === date.getTime())
-                }}
-                modifiersClassNames={{
-                  selected: "bg-primary text-primary-foreground rounded-md"
-                }}
-              />
-              {maxDates && (
-                <div className="px-3 pb-2 text-xs text-muted-foreground">
-                  {selectedDates.length} / {maxDates} dates selected
-                </div>
-              )}
-            </div>
-            {clearable && selectedDates.length > 0 && (
-              <div className="border-t border-border p-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="w-full justify-start"
-                  onClick={handleClear}
-                  disabled={disabled}
-                >
-                  {clearLabel}
-                </Button>
+                          {format(date, dateFormat)}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveDate(date)}
+                            className="ml-1 rounded-full hover:bg-destructive/20 p-0.5"
+                            disabled={disabled}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      ))}
+                  </div>
+                )}
+                <Calendar
+                  initialFocus
+                  mode="single"
+                  selected={undefined} // Don't show single selection highlight
+                  onSelect={handleSelect}
+                  numberOfMonths={numberOfMonths}
+                  defaultMonth={defaultMonth}
+                  captionLayout="dropdown"
+                  disabled={combinedDisabled}
+                  fromYear={fromYear}
+                  toYear={toYear}
+                  modifiers={{
+                    selected: (date) =>
+                      selectedDates.some((d) => d.getTime() === date.getTime()),
+                  }}
+                  modifiersClassNames={{
+                    selected: "bg-primary text-primary-foreground rounded-md",
+                  }}
+                />
+                {maxDates && (
+                  <div className="px-3 pb-2 text-xs text-muted-foreground">
+                    {selectedDates.length} / {maxDates} dates selected
+                  </div>
+                )}
               </div>
-            )}
+              {clearable && selectedDates.length > 0 && (
+                <div className="border-t border-border p-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="w-full justify-start"
+                    onClick={handleClear}
+                    disabled={disabled}
+                  >
+                    {clearLabel}
+                  </Button>
+                </div>
+              )}
+            </Card>
           </PopoverContent>
         </Popover>
       </div>
