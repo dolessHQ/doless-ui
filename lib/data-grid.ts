@@ -128,9 +128,68 @@ export interface DataGridStoredPreferences {
   columnSizing?: ColumnSizingState
 }
 
+export interface DataGridViewSnapshot<TFilters, TSort> extends DataGridStoredPreferences {
+  filters: TFilters
+  sorting: TSort
+  pageSize: number
+}
+
+export interface DataGridSavedView<TFilters, TSort> {
+  id: string
+  name: string
+  snapshot: DataGridViewSnapshot<TFilters, TSort>
+  isDefault?: boolean
+}
+
+export interface DataGridSavedViewAdapter<TFilters, TSort> {
+  list: () =>
+    | Promise<Array<DataGridSavedView<TFilters, TSort>>>
+    | Array<DataGridSavedView<TFilters, TSort>>
+  create: (input: {
+    name: string
+    snapshot: DataGridViewSnapshot<TFilters, TSort>
+    isDefault?: boolean
+  }) =>
+    | Promise<DataGridSavedView<TFilters, TSort>>
+    | DataGridSavedView<TFilters, TSort>
+  update: (
+    viewId: string,
+    updates: {
+      name?: string
+      snapshot?: DataGridViewSnapshot<TFilters, TSort>
+      isDefault?: boolean
+    }
+  ) =>
+    | Promise<DataGridSavedView<TFilters, TSort>>
+    | DataGridSavedView<TFilters, TSort>
+  delete: (viewId: string) => Promise<void> | void
+}
+
+export interface DataGridRowAction<TData> {
+  label: string
+  icon?: React.ReactNode
+  variant?: "default" | "secondary" | "outline" | "destructive" | "ghost"
+  onSelect: (row: TData) => Promise<void> | void
+  isDisabled?: (row: TData) => boolean
+  isHidden?: (row: TData) => boolean
+}
+
+export interface DataGridBulkAction<TData> {
+  label: string
+  icon?: React.ReactNode
+  variant?: "default" | "secondary" | "outline" | "destructive" | "ghost"
+  onSelect: (rows: TData[]) => Promise<void> | void
+  isDisabled?: (rows: TData[]) => boolean
+}
+
 type DataGridPreferenceEnvelope = {
   version: number
   preferences: DataGridStoredPreferences
+}
+
+type DataGridSavedViewsEnvelope<TFilters, TSort> = {
+  version: number
+  views: Array<DataGridSavedView<TFilters, TSort>>
 }
 
 export interface CreateDataGridStateCodecOptions<TFilters> {
@@ -155,6 +214,7 @@ export interface UseDataGridControllerArgs<TData, TFilters, TSort> {
 }
 
 const DATA_GRID_STORAGE_VERSION = 1
+const DATA_GRID_SAVED_VIEWS_VERSION = 1
 const DEFAULT_PAGE_PARAM = "page"
 const DEFAULT_PAGE_SIZE_PARAM = "page_size"
 const DEFAULT_SORT_PARAM = "sort"
@@ -359,6 +419,9 @@ export function createDataGridStateCodec<TFilters>({
 export const buildDataGridPreferenceStorageKey = (tableId: string) =>
   `doless:data-grid:${tableId}:v${DATA_GRID_STORAGE_VERSION}`
 
+export const buildDataGridSavedViewsStorageKey = (tableId: string) =>
+  `doless:data-grid:saved-views:${tableId}:v${DATA_GRID_SAVED_VIEWS_VERSION}`
+
 export const readDataGridPreferences = (
   tableId: string
 ): DataGridStoredPreferences | null => {
@@ -403,35 +466,63 @@ export const writeDataGridPreferences = (
   }
 }
 
+export const readDataGridSavedViews = <TFilters, TSort>(
+  tableId: string
+): Array<DataGridSavedView<TFilters, TSort>> => {
+  if (typeof window === "undefined") return []
+
+  try {
+    const rawValue = window.localStorage.getItem(
+      buildDataGridSavedViewsStorageKey(tableId)
+    )
+    if (!rawValue) return []
+
+    const parsed = JSON.parse(rawValue) as unknown
+    if (!isRecord(parsed)) return []
+    if (parsed.version !== DATA_GRID_SAVED_VIEWS_VERSION) return []
+    if (!Array.isArray(parsed.views)) return []
+
+    return parsed.views as Array<DataGridSavedView<TFilters, TSort>>
+  } catch (error) {
+    console.warn("Failed to read data grid saved views", error)
+    return []
+  }
+}
+
+export const writeDataGridSavedViews = <TFilters, TSort>(
+  tableId: string,
+  views: Array<DataGridSavedView<TFilters, TSort>>
+) => {
+  if (typeof window === "undefined") return
+
+  try {
+    const envelope: DataGridSavedViewsEnvelope<TFilters, TSort> = {
+      version: DATA_GRID_SAVED_VIEWS_VERSION,
+      views,
+    }
+
+    window.localStorage.setItem(
+      buildDataGridSavedViewsStorageKey(tableId),
+      JSON.stringify(envelope)
+    )
+  } catch (error) {
+    console.warn("Failed to persist data grid saved views", error)
+  }
+}
+
 const buildInitialSnapshot = <TFilters, TSort>(
   initialFilters: TFilters,
   initialSorting: TSort,
   initialPage: number,
   initialPageSize: number,
-  stateCodec?: DataGridStateCodec<TFilters, TSort>,
-  syncToUrl = true
+  _stateCodec?: DataGridStateCodec<TFilters, TSort>,
+  _syncToUrl = true
 ): DataGridStateSnapshot<TFilters, TSort> => {
-  const defaults: DataGridStateSnapshot<TFilters, TSort> = {
+  return {
     filters: initialFilters,
     sorting: initialSorting,
     page: initialPage,
     pageSize: initialPageSize,
-  }
-
-  if (!syncToUrl || !stateCodec || typeof window === "undefined") {
-    return defaults
-  }
-
-  const parsed = stateCodec.parse(
-    new URLSearchParams(window.location.search),
-    defaults
-  )
-
-  return {
-    filters: parsed.filters ?? defaults.filters,
-    sorting: parsed.sorting ?? defaults.sorting,
-    page: parsed.page ?? defaults.page,
-    pageSize: parsed.pageSize ?? defaults.pageSize,
   }
 }
 
@@ -477,11 +568,21 @@ export function useDataGridController<TData, TFilters, TSort>({
 
   const latestRequestIdRef = React.useRef(0)
   const previousFiltersRef = React.useRef(filters)
+  const loadPageRef = React.useRef(loadPage)
+  const shouldDebounceLoadRef = React.useRef(shouldDebounceLoad)
 
   const totalPages = React.useMemo(
     () => Math.max(1, Math.ceil(totalCount / Math.max(pageSize, 1))),
     [pageSize, totalCount]
   )
+
+  React.useEffect(() => {
+    loadPageRef.current = loadPage
+  }, [loadPage])
+
+  React.useEffect(() => {
+    shouldDebounceLoadRef.current = shouldDebounceLoad
+  }, [shouldDebounceLoad])
 
   React.useEffect(() => {
     if (!syncToUrl || !stateCodec || typeof window === "undefined") {
@@ -537,7 +638,9 @@ export function useDataGridController<TData, TFilters, TSort>({
     const previousFilters = previousFiltersRef.current
     previousFiltersRef.current = filters
     const debounce =
-      shouldDebounceLoad?.(filters, previousFilters) === true ? debounceMs : 0
+      shouldDebounceLoadRef.current?.(filters, previousFilters) === true
+        ? debounceMs
+        : 0
 
     let cancelled = false
 
@@ -546,7 +649,7 @@ export function useDataGridController<TData, TFilters, TSort>({
         setIsLoading(true)
         setError(null)
 
-        const result = await loadPage({
+        const result = await loadPageRef.current({
           page,
           pageSize,
           filters,
@@ -590,7 +693,7 @@ export function useDataGridController<TData, TFilters, TSort>({
     return () => {
       cancelled = true
     }
-  }, [debounceMs, filters, loadPage, page, pageSize, refreshNonce, shouldDebounceLoad, sorting, tableId])
+  }, [debounceMs, filters, page, pageSize, refreshNonce, sorting, tableId])
 
   const setFilters = React.useCallback((nextFilters: TFilters) => {
     setPage(1)

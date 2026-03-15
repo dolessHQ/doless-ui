@@ -24,7 +24,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "registry:build": "shadcn build"
+    "registry:build": "shadcn build",
+    "smoke:data-grid": "bash ./scripts/smoke-data-grid-consumer.sh"
   },
   "dependencies": {
     "@tanstack/react-table": "^8.21.3",

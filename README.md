@@ -3,11 +3,268 @@
 DolessHQ UI is a collection of UI components for the DolessHQ platform.
 Visit [DolessHQ UI](https://doless-ui.vercel.app/) to see the components in action.
 
+## Registry Item: data-grid
+
+`data-grid` is the shared table phenotype item for reusable, host-driven table experiences.
+
+Install URL:
+- https://doless-ui.vercel.app/r/data-grid.json
+
+Install:
+```bash
+shadcn add https://doless-ui.vercel.app/r/data-grid.json
+```
+
+Required dependencies:
+- `@tanstack/react-table`
+- `lucide-react`
+- registry dependencies: `badge`, `button`, `calendar`, `card`, `input`, `label`, `popover`, `separator`
+- installable helper: `lib/data-grid.ts`
+
+Required imports after install:
+- `import { DataGrid } from "@/components/DataGrid"`
+- `import { createDataGridStateCodec, useDataGridController } from "@/lib/data-grid"`
+
+Public props/types and extension surface:
+- `DataGrid` component props include:
+  - data wiring: `tableId`, `columns`, `rows`, `totalCount`, `totalPages`
+  - state hooks: `filters`, `onFiltersChange`, `sorting`, `onSortingChange`, `currentPage`, `onPageChange`, `pageSize`, `onPageSizeChange`
+  - display controls: `filterDefinitions`, `exportActions`, `actionButtons`, `onRefresh`, `emptyTitle`, `emptyDescription`, `mobilePinningBreakpoint`
+  - interactions: `onRowClick`, `selectedRowId`, `getRowId`
+- `DataGridExportContext`, `DataGridExportAction` for host-owned export hooks.
+- `DataGridFilterDefinition` schema API:
+  - `search`
+  - `single-select`
+  - `multi-select`
+  - `boolean`
+  - `date-range`
+  - `custom`
+- `createDataGridStateCodec` and `DataGridStateCodec` for URL synchronization and custom codecs.
+- `DataGridColumnMeta` for column defaults:
+  - `pinnable`
+  - `defaultPinned`
+  - `defaultVisible`
+  - `orderPriority`
+  - `minSize`
+  - `maxSize`
+- `DataGridSavedView`, `DataGridViewSnapshot`, and `DataGridSavedViewAdapter` types are provided for host-owned saved-view implementations.
+- `DataGridRowAction` and `DataGridBulkAction` types are provided for host-owned action models.
+- `useDataGridController` + `DataGridLoader` for remote-load driven tables.
+
+Saved views behavior:
+- Snapshot model includes filters, sorting, page size, and all column layout state (visibility/order/pinning/sizing).
+- Set `enableSavedViews` to render the built-in `Views` control.
+- Without a `savedViewsAdapter`, views persist locally under the current `tableId`.
+- With a `savedViewsAdapter`, the same UI uses host-backed list/create/update/delete/default view behavior.
+- `readDataGridSavedViews`/`writeDataGridSavedViews` are available from `lib/data-grid.ts` if you want to compose your own adapter or inspect local state.
+
+Row actions and bulk actions behavior:
+- Pass `rowActions` to render the shared trailing kebab-menu column.
+- Pass `bulkActions` to render the shared leading checkbox-selection column and contextual bulk action bar.
+- `DataGridRowAction` and `DataGridBulkAction` define the host-owned commands; the shared component renders the UI but does not impose domain semantics.
+- Bulk selection is page-scoped in v1 and clears automatically on page, filter, sort, and page-size changes.
+
+URL state and local preference behavior:
+- Use `createDataGridStateCodec` with `stateCodec` + `syncToUrl` in `useDataGridController`.
+- Default URL-backed state keys:
+  - `page`, `page_size`, `sort`
+  - filter keys from each `DataGridFilterDefinition`
+- Local table preferences (`columnVisibility`, `columnOrder`, `columnPinning`, `columnSizing`) persist under `tableId`.
+- When saved views are enabled, URL state wins on initial load, then default saved views, then local/current defaults.
+- URL state is intended for shareable table state; local preferences are for UX memory across sessions.
+
+Minimal consumer example:
+
+```tsx
+"use client"
+
+import * as React from "react"
+import { DataGrid, type DataGridExportAction } from "@/components/DataGrid"
+import { DataGridPageShell } from "@/components/DataGridPageShell"
+import {
+  createDataGridStateCodec,
+  type DataGridFilterDefinition,
+  type DataGridLoaderArgs,
+  type DataGridSortState,
+  useDataGridController,
+} from "@/lib/data-grid"
+import type { ColumnDef } from "@tanstack/react-table"
+
+type Customer = {
+  id: string
+  company: string
+  plan: "starter" | "pro" | "growth"
+  active: boolean
+  teamCount: number
+}
+
+type CustomerFilters = {
+  search: string | null
+  plan: string | null
+}
+
+const FILTER_DEFINITIONS: Array<DataGridFilterDefinition<CustomerFilters>> = [
+  {
+    id: "search",
+    label: "Search",
+    kind: "search",
+    getValue: (filters) => filters.search,
+    setValue: (filters, value) => ({ ...filters, search: value ?? null }),
+    placeholder: "Search customers",
+  },
+  {
+    id: "plan",
+    label: "Plan",
+    kind: "single-select",
+    options: [
+      { label: "Starter", value: "starter" },
+      { label: "Pro", value: "pro" },
+      { label: "Growth", value: "growth" },
+    ],
+    getValue: (filters) => filters.plan,
+    setValue: (filters, value) => ({ ...filters, plan: value ?? null }),
+  },
+]
+
+const DEFAULT_FILTERS: CustomerFilters = { search: null, plan: null }
+const DEFAULT_SORTING: DataGridSortState = [{ id: "company", desc: false }]
+const stateCodec = createDataGridStateCodec({ filterDefinitions: FILTER_DEFINITIONS })
+
+const CUSTOMERS: Customer[] = [
+  { id: "c-1", company: "Northwind", plan: "growth", active: true, teamCount: 12 },
+  { id: "c-2", company: "Acme", plan: "pro", active: false, teamCount: 4 },
+  { id: "c-3", company: "Summit", plan: "starter", active: true, teamCount: 3 },
+]
+
+const loadCustomers = async ({
+  page,
+  pageSize,
+  filters,
+  sorting,
+}: DataGridLoaderArgs<CustomerFilters, DataGridSortState>) => {
+  let rows = [...CUSTOMERS]
+
+  if (filters.search) {
+    const search = filters.search.toLowerCase()
+    rows = rows.filter((row) => row.company.toLowerCase().includes(search))
+  }
+
+  if (filters.plan) {
+    rows = rows.filter((row) => row.plan === filters.plan)
+  }
+
+  if (sorting.length > 0) {
+    const sort = sorting[0]
+    rows = [...rows].sort((lhs, rhs) => {
+      const left = String(lhs[sort.id as keyof Customer] ?? "")
+      const right = String(rhs[sort.id as keyof Customer] ?? "")
+      const delta = left.localeCompare(right)
+      return sort.desc ? -delta : delta
+    })
+  }
+
+  const offset = (page - 1) * pageSize
+  const totalCount = rows.length
+
+  return {
+    rows: rows.slice(offset, offset + pageSize),
+    totalCount,
+  }
+}
+
+const COLUMNS: ColumnDef<Customer>[] = [
+  { accessorKey: "company", header: "Company", meta: { orderPriority: 1 } },
+  { accessorKey: "plan", header: "Plan", meta: { orderPriority: 2 } },
+  { accessorKey: "teamCount", header: "Team Size", meta: { orderPriority: 3 } },
+  {
+    accessorKey: "active",
+    header: "Active",
+    cell: ({ getValue }) => (getValue<boolean>() ? "Active" : "Paused"),
+    meta: { orderPriority: 4 },
+  },
+]
+
+const EXPORT_ACTIONS: Array<DataGridExportAction<Customer, CustomerFilters, DataGridSortState>> = [
+  {
+    label: "Copy company names",
+    onExport: ({ rows }) => {
+      void navigator.clipboard.writeText(rows.map((row) => row.company).join("\n"))
+    },
+  },
+]
+
+export default function DataGridDemo() {
+  const tableId = "smoke-data-grid-demo"
+  const controller = useDataGridController<Customer, CustomerFilters, DataGridSortState>({
+    tableId,
+    initialFilters: DEFAULT_FILTERS,
+    initialSorting: DEFAULT_SORTING,
+    loadPage: loadCustomers,
+    stateCodec,
+  })
+
+  return (
+    <DataGridPageShell
+      title="Data Grid Example"
+      subtitle="Reusable table shell with schema-driven filters and URL state."
+    >
+      <DataGrid
+        tableId={tableId}
+        columns={COLUMNS}
+        rows={controller.rows}
+        filters={controller.filters}
+        onFiltersChange={controller.setFilters}
+        sorting={controller.sorting}
+        onSortingChange={controller.setSorting}
+        filterDefinitions={FILTER_DEFINITIONS}
+        currentPage={controller.currentPage}
+        pageSize={controller.pageSize}
+        totalCount={controller.totalCount}
+        totalPages={controller.totalPages}
+        onPageChange={controller.setCurrentPage}
+        onPageSizeChange={controller.setPageSize}
+        isLoading={controller.isLoading}
+        error={controller.error}
+        onRefresh={controller.refresh}
+        exportActions={EXPORT_ACTIONS}
+      />
+    </DataGridPageShell>
+  )
+}
+```
+
+## Registry Item: data-grid-page-shell
+
+`data-grid-page-shell` is the shared page frame for a table-driven surface.
+
+Install URL:
+- https://doless-ui.vercel.app/r/data-grid-page-shell.json
+
+Install:
+```bash
+shadcn add https://doless-ui.vercel.app/r/data-grid-page-shell.json
+```
+
+Public props:
+- `eyebrow`
+- `title`
+- `subtitle`
+- `primaryAction`
+- `secondaryActions`
+- `toolbar`
+- `children`
+- `detailPane`
+- `footer`
+- `dialogLayer`
+- `className`
+- `contentClassName`
+- `detailPaneClassName`
+
+The shell is intentionally host-owned beyond layout and does not implement data fetching, filtering, or domain actions.
+
 ## Custom Components (registry/doless)
 
-The `registry/new-york/doless` folder contains client-side components intended
-for reuse across apps. Each component exposes a minimal prop surface for common
-date and color interactions.
+The `registry/new-york/doless` folder also contains date and color components for broad reuse.
 
 ### ColorPickerPopover
 
@@ -114,3 +371,21 @@ Props:
 - `formatted`: Formatted display strings.
 - `iso`: ISO strings.
 - `label`: Summary label string.
+
+## Smoke Test
+
+Use the reusable smoke test to validate installability in a clean consumer app.
+
+```bash
+npm run smoke:data-grid
+```
+
+Override registry host with:
+
+```bash
+REGISTRY_BASE_URL=http://localhost:3000 npm run smoke:data-grid
+```
+
+The script creates a temporary Next app, runs `shadcn init`, installs both
+`data-grid` and `data-grid-page-shell`, writes a minimal example page using both
+items, and runs `npm run build`.

@@ -3,7 +3,16 @@
 import * as React from "react"
 import { format, isAfter, isBefore, parseISO } from "date-fns"
 import type { ColumnDef } from "@tanstack/react-table"
-import { Activity, ArrowUpRight, Building2, Cable, Download, Plus } from "lucide-react"
+import {
+  Activity,
+  ArrowUpRight,
+  Building2,
+  Cable,
+  CheckCheck,
+  Download,
+  Plus,
+  Siren,
+} from "lucide-react"
 
 import { OpenInV0Button } from "@/components/open-in-v0-button"
 import { Badge } from "@/registry/new-york/ui/badge"
@@ -19,8 +28,10 @@ import { DataGrid } from "@/registry/new-york/doless/DataGrid"
 import { DataGridPageShell } from "@/registry/new-york/doless/DataGridPageShell"
 import {
   createDataGridStateCodec,
+  type DataGridBulkAction,
   type DataGridDateRangeValue,
   type DataGridFilterDefinition,
+  type DataGridRowAction,
   type DataGridSortState,
   useDataGridController,
 } from "@/lib/data-grid"
@@ -258,6 +269,7 @@ const initialFilters: ShowcaseFilters = {
 }
 
 export default function Home() {
+  const [accounts, setAccounts] = React.useState(SHOWCASE_DATA)
   const [selectedAccountId, setSelectedAccountId] = React.useState<string | null>(
     SHOWCASE_DATA[0]?.id ?? null
   )
@@ -407,7 +419,7 @@ export default function Home() {
     }) => {
       await new Promise((resolve) => window.setTimeout(resolve, 180))
 
-      let filtered = [...SHOWCASE_DATA]
+      let filtered = [...accounts]
 
       if (filters.search) {
         const query = filters.search.toLowerCase()
@@ -493,6 +505,18 @@ export default function Home() {
         totalCount: sorted.length,
       }
     },
+    [accounts]
+  )
+
+  const updateAccounts = React.useCallback(
+    (accountIds: string[], updater: (account: ShowcaseAccount) => ShowcaseAccount) => {
+      const accountIdSet = new Set(accountIds)
+      setAccounts((currentAccounts) =>
+        currentAccounts.map((account) =>
+          accountIdSet.has(account.id) ? updater(account) : account
+        )
+      )
+    },
     []
   )
 
@@ -524,6 +548,20 @@ export default function Home() {
       nextFilters.search !== previousFilters.search,
     getRowId: (row) => row.id,
   })
+
+  React.useEffect(() => {
+    if (!selectedAccountId && accounts[0]?.id) {
+      setSelectedAccountId(accounts[0].id)
+      return
+    }
+
+    if (
+      selectedAccountId &&
+      !accounts.some((account) => account.id === selectedAccountId)
+    ) {
+      setSelectedAccountId(accounts[0]?.id ?? null)
+    }
+  }, [accounts, selectedAccountId])
 
   const columns = React.useMemo<Array<ColumnDef<ShowcaseAccount>>>(
     () => [
@@ -705,8 +743,8 @@ export default function Home() {
 
   const selectedAccount = React.useMemo(
     () =>
-      SHOWCASE_DATA.find((account) => account.id === selectedAccountId) ?? rows[0] ?? null,
-    [rows, selectedAccountId]
+      accounts.find((account) => account.id === selectedAccountId) ?? rows[0] ?? null,
+    [accounts, rows, selectedAccountId]
   )
 
   const exportActions = React.useMemo(
@@ -759,11 +797,85 @@ export default function Home() {
     []
   )
 
+  const rowActions = React.useMemo<Array<DataGridRowAction<ShowcaseAccount>>>(
+    () => [
+      {
+        label: "Open in detail rail",
+        onSelect: (row) => setSelectedAccountId(row.id),
+      },
+      {
+        label: "Raise attention",
+        variant: "outline",
+        isDisabled: (row) => row.attention,
+        onSelect: (row) => {
+          updateAccounts([row.id], (account) => ({
+            ...account,
+            attention: true,
+          }))
+          void refresh()
+        },
+      },
+      {
+        label: "Clear attention",
+        variant: "outline",
+        isDisabled: (row) => !row.attention,
+        onSelect: (row) => {
+          updateAccounts([row.id], (account) => ({
+            ...account,
+            attention: false,
+          }))
+          void refresh()
+        },
+      },
+    ],
+    [refresh, updateAccounts]
+  )
+
+  const bulkActions = React.useMemo<Array<DataGridBulkAction<ShowcaseAccount>>>(
+    () => [
+      {
+        label: "Raise attention",
+        icon: <Siren className="size-4" />,
+        variant: "outline",
+        isDisabled: (selectedRows) =>
+          selectedRows.length === 0 || selectedRows.every((row) => row.attention),
+        onSelect: (selectedRows) => {
+          updateAccounts(
+            selectedRows.map((row) => row.id),
+            (account) => ({
+              ...account,
+              attention: true,
+            })
+          )
+          void refresh()
+        },
+      },
+      {
+        label: "Mark stable",
+        icon: <CheckCheck className="size-4" />,
+        variant: "outline",
+        isDisabled: (selectedRows) =>
+          selectedRows.length === 0 || selectedRows.every((row) => !row.attention),
+        onSelect: (selectedRows) => {
+          updateAccounts(
+            selectedRows.map((row) => row.id),
+            (account) => ({
+              ...account,
+              attention: false,
+            })
+          )
+          void refresh()
+        },
+      },
+    ],
+    [refresh, updateAccounts]
+  )
+
   return (
     <DataGridPageShell
       eyebrow="Registry Preview"
       title="Shared Data Grid"
-      subtitle="A client-ready table surface with filters, exports, saved state, column controls, and a host-owned detail rail that can travel cleanly between projects."
+      subtitle="A client-ready table surface with filters, saved views, row and bulk actions, exports, column controls, and a host-owned detail rail that can travel cleanly between projects."
       secondaryActions={
         <>
           <OpenInV0Button name="data-grid" />
@@ -877,7 +989,7 @@ export default function Home() {
       footer={
         <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
           <span>Select a row to drive the host detail rail.</span>
-          <span>Pin, hide, resize, and reload to verify persistence.</span>
+          <span>Save views, trigger row actions, and use bulk actions to verify the phenotype.</span>
         </div>
       }
     >
@@ -899,6 +1011,9 @@ export default function Home() {
         isLoading={isLoading}
         error={error}
         onRefresh={refresh}
+        enableSavedViews
+        rowActions={rowActions}
+        bulkActions={bulkActions}
         getRowId={(row) => row.id}
         onRowClick={(row) => setSelectedAccountId(row.id)}
         selectedRowId={selectedAccountId}
