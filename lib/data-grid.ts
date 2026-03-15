@@ -103,6 +103,7 @@ export interface DataGridStateCodec<TFilters, TSort> {
     defaults: DataGridStateSnapshot<TFilters, TSort>
   ) => Partial<DataGridStateSnapshot<TFilters, TSort>>
   serialize: (state: DataGridStateSnapshot<TFilters, TSort>) => URLSearchParams
+  getOwnedParams?: () => string[]
 }
 
 export interface DataGridLoaderArgs<TFilters, TSort> {
@@ -358,6 +359,20 @@ export function createDataGridStateCodec<TFilters>({
   TFilters,
   SortingState
 > {
+  const ownedParams = Array.from(
+    new Set(
+      filterDefinitions.flatMap((definition) => {
+        const paramKey = definition.paramKey ?? definition.id
+
+        if (definition.kind === "date-range") {
+          return [paramKey, `${paramKey}_from`, `${paramKey}_to`, `${paramKey}_mode`]
+        }
+
+        return [paramKey]
+      })
+    )
+  )
+
   return {
     parse(params, defaults) {
       let filters = defaults.filters
@@ -412,6 +427,9 @@ export function createDataGridStateCodec<TFilters>({
       }
 
       return params
+    },
+    getOwnedParams() {
+      return [...ownedParams, pageParam, pageSizeParam, sortParam]
     },
   }
 }
@@ -514,17 +532,13 @@ const buildInitialSnapshot = <TFilters, TSort>(
   initialFilters: TFilters,
   initialSorting: TSort,
   initialPage: number,
-  initialPageSize: number,
-  _stateCodec?: DataGridStateCodec<TFilters, TSort>,
-  _syncToUrl = true
-): DataGridStateSnapshot<TFilters, TSort> => {
-  return {
-    filters: initialFilters,
-    sorting: initialSorting,
-    page: initialPage,
-    pageSize: initialPageSize,
-  }
-}
+  initialPageSize: number
+): DataGridStateSnapshot<TFilters, TSort> => ({
+  filters: initialFilters,
+  sorting: initialSorting,
+  page: initialPage,
+  pageSize: initialPageSize,
+})
 
 export function useDataGridController<TData, TFilters, TSort>({
   tableId,
@@ -544,11 +558,15 @@ export function useDataGridController<TData, TFilters, TSort>({
       initialFilters,
       initialSorting,
       initialPage,
-      initialPageSize,
-      stateCodec,
-      syncToUrl
+      initialPageSize
     )
   )
+  const initialControllerStateRef = React.useRef({
+    filters: initialFilters,
+    sorting: initialSorting,
+    page: initialPage,
+    pageSize: initialPageSize,
+  })
 
   const [rows, setRows] = React.useState<TData[]>([])
   const [filters, setFiltersState] = React.useState(
@@ -565,6 +583,10 @@ export function useDataGridController<TData, TFilters, TSort>({
   const [isLoading, setIsLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [refreshNonce, setRefreshNonce] = React.useState(0)
+  const [initialUrlStateHydrated, setInitialUrlStateHydrated] = React.useState(
+    !syncToUrl || !stateCodec
+  )
+  const [hasInitialUrlState, setHasInitialUrlState] = React.useState(false)
 
   const latestRequestIdRef = React.useRef(0)
   const previousFiltersRef = React.useRef(filters)
@@ -586,19 +608,62 @@ export function useDataGridController<TData, TFilters, TSort>({
 
   React.useEffect(() => {
     if (!syncToUrl || !stateCodec || typeof window === "undefined") {
+      setInitialUrlStateHydrated(true)
+      setHasInitialUrlState(false)
       return
     }
 
-    const params = stateCodec.serialize({
+    const defaults = buildInitialSnapshot(
+      initialControllerStateRef.current.filters,
+      initialControllerStateRef.current.sorting,
+      initialControllerStateRef.current.page,
+      initialControllerStateRef.current.pageSize
+    )
+    const currentParams = new URLSearchParams(window.location.search)
+    const ownedParams = stateCodec.getOwnedParams?.() ?? []
+    const hasOwnedUrlState = ownedParams.some((paramKey) => currentParams.has(paramKey))
+    const parsed = stateCodec.parse(currentParams, defaults)
+
+    setHasInitialUrlState(hasOwnedUrlState)
+    setFiltersState(parsed.filters ?? defaults.filters)
+    setSortingState(parsed.sorting ?? defaults.sorting)
+    setPage(parsed.page ?? defaults.page)
+    setPageSize(parsed.pageSize ?? defaults.pageSize)
+    setInitialUrlStateHydrated(true)
+  }, [
+    stateCodec,
+    syncToUrl,
+  ])
+
+  React.useEffect(() => {
+    if (!initialUrlStateHydrated) {
+      return
+    }
+
+    if (!syncToUrl || !stateCodec || typeof window === "undefined") {
+      return
+    }
+
+    const nextGridParams = stateCodec.serialize({
       filters,
       sorting,
       page,
       pageSize,
     })
+    const params = new URLSearchParams(window.location.search)
+
+    for (const paramKey of stateCodec.getOwnedParams?.() ?? []) {
+      params.delete(paramKey)
+    }
+
+    for (const [key, value] of nextGridParams.entries()) {
+      params.set(key, value)
+    }
+
     const query = params.toString()
     const nextUrl = `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`
     window.history.replaceState({}, "", nextUrl)
-  }, [filters, page, pageSize, sorting, stateCodec, syncToUrl])
+  }, [filters, initialUrlStateHydrated, page, pageSize, sorting, stateCodec, syncToUrl])
 
   React.useEffect(() => {
     if (!syncToUrl || !stateCodec || typeof window === "undefined") {
@@ -609,31 +674,31 @@ export function useDataGridController<TData, TFilters, TSort>({
       const parsed = stateCodec.parse(
         new URLSearchParams(window.location.search),
         {
-          filters: initialFilters,
-          sorting: initialSorting,
-          page: initialPage,
-          pageSize: initialPageSize,
+          filters: initialControllerStateRef.current.filters,
+          sorting: initialControllerStateRef.current.sorting,
+          page: initialControllerStateRef.current.page,
+          pageSize: initialControllerStateRef.current.pageSize,
         }
       )
 
-      setFiltersState(parsed.filters ?? initialFilters)
-      setSortingState(parsed.sorting ?? initialSorting)
-      setPage(parsed.page ?? initialPage)
-      setPageSize(parsed.pageSize ?? initialPageSize)
+      setFiltersState(parsed.filters ?? initialControllerStateRef.current.filters)
+      setSortingState(parsed.sorting ?? initialControllerStateRef.current.sorting)
+      setPage(parsed.page ?? initialControllerStateRef.current.page)
+      setPageSize(parsed.pageSize ?? initialControllerStateRef.current.pageSize)
     }
 
     window.addEventListener("popstate", handlePopState)
     return () => window.removeEventListener("popstate", handlePopState)
   }, [
-    initialFilters,
-    initialPage,
-    initialPageSize,
-    initialSorting,
     stateCodec,
     syncToUrl,
   ])
 
   React.useEffect(() => {
+    if (!initialUrlStateHydrated) {
+      return
+    }
+
     const requestId = ++latestRequestIdRef.current
     const previousFilters = previousFiltersRef.current
     previousFiltersRef.current = filters
@@ -693,7 +758,7 @@ export function useDataGridController<TData, TFilters, TSort>({
     return () => {
       cancelled = true
     }
-  }, [debounceMs, filters, page, pageSize, refreshNonce, sorting, tableId])
+  }, [debounceMs, filters, initialUrlStateHydrated, page, pageSize, refreshNonce, sorting, tableId])
 
   const setFilters = React.useCallback((nextFilters: TFilters) => {
     setPage(1)
@@ -741,6 +806,7 @@ export function useDataGridController<TData, TFilters, TSort>({
     totalPages,
     isLoading,
     error,
+    hasInitialUrlState,
     setFilters,
     setSorting,
     setCurrentPage: setPage,

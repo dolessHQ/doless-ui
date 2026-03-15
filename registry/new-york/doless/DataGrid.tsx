@@ -120,6 +120,7 @@ export interface DataGridProps<TData extends RowData, TFilters> {
   totalPages: number
   onPageChange: (page: number) => void
   onPageSizeChange: (pageSize: number) => void
+  hasInitialUrlState?: boolean
   isLoading?: boolean
   error?: string | null
   onRefresh?: () => Promise<void> | void
@@ -344,6 +345,30 @@ const getAlignmentClassName = (align?: DataGridColumnMeta["align"]) => {
     default:
       return "text-left"
   }
+}
+
+const hasRecognizedGridUrlState = <TFilters,>(
+  params: URLSearchParams,
+  filterDefinitions: Array<DataGridFilterDefinition<TFilters>>
+) => {
+  if (params.has("page") || params.has("page_size") || params.has("sort")) {
+    return true
+  }
+
+  return filterDefinitions.some((definition) => {
+    const paramKey = definition.paramKey ?? definition.id
+
+    if (definition.kind === "date-range") {
+      return (
+        params.has(paramKey) ||
+        params.has(`${paramKey}_from`) ||
+        params.has(`${paramKey}_to`) ||
+        params.has(`${paramKey}_mode`)
+      )
+    }
+
+    return params.has(paramKey)
+  })
 }
 
 const getVisiblePageNumbers = (currentPage: number, totalPages: number) => {
@@ -1291,6 +1316,7 @@ export function DataGrid<TData extends RowData, TFilters>({
   totalPages,
   onPageChange,
   onPageSizeChange,
+  hasInitialUrlState,
   isLoading = false,
   error,
   onRefresh,
@@ -1321,7 +1347,7 @@ export function DataGrid<TData extends RowData, TFilters>({
 
   const initialUrlPresentRef = React.useRef(false)
   const defaultViewAppliedRef = React.useRef(false)
-  const preferencesHydratedRef = React.useRef(false)
+  const [preferencesHydrated, setPreferencesHydrated] = React.useState(false)
 
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>(
     defaultPreferences.columnVisibility ?? {}
@@ -1360,7 +1386,11 @@ export function DataGrid<TData extends RowData, TFilters>({
 
   React.useEffect(() => {
     initialUrlPresentRef.current =
-      new URLSearchParams(window.location.search).toString().length > 0
+      hasInitialUrlState ??
+      hasRecognizedGridUrlState(
+        new URLSearchParams(window.location.search),
+        filterDefinitions
+      )
 
     const storedPreferences = readDataGridPreferences(tableId)
     const hydratedPreferences = mergePreferences(defaultPreferences, storedPreferences)
@@ -1369,8 +1399,8 @@ export function DataGrid<TData extends RowData, TFilters>({
     setColumnOrder(hydratedPreferences.columnOrder ?? [])
     setColumnPinning(hydratedPreferences.columnPinning ?? { left: [], right: [] })
     setColumnSizing(hydratedPreferences.columnSizing ?? {})
-    preferencesHydratedRef.current = true
-  }, [defaultPreferences, tableId])
+    setPreferencesHydrated(true)
+  }, [defaultPreferences, filterDefinitions, hasInitialUrlState, tableId])
 
   React.useEffect(() => {
     const mediaQuery =
@@ -1391,7 +1421,7 @@ export function DataGrid<TData extends RowData, TFilters>({
   }, [mobilePinningBreakpoint])
 
   React.useEffect(() => {
-    if (!preferencesHydratedRef.current) return
+    if (!preferencesHydrated) return
 
     writeDataGridPreferences(tableId, {
       columnVisibility,
@@ -1399,7 +1429,7 @@ export function DataGrid<TData extends RowData, TFilters>({
       columnPinning,
       columnSizing,
     })
-  }, [columnOrder, columnPinning, columnSizing, columnVisibility, tableId])
+  }, [columnOrder, columnPinning, columnSizing, columnVisibility, preferencesHydrated, tableId])
 
   const currentSnapshot = React.useMemo(
     () =>
@@ -1705,11 +1735,19 @@ export function DataGrid<TData extends RowData, TFilters>({
     () => visibleRows.filter((row) => selectedRowIds.includes(row.id)),
     [selectedRowIds, visibleRows]
   )
+  const filtersSignature = React.useMemo(
+    () => JSON.stringify(filters),
+    [filters]
+  )
+  const sortingSignature = React.useMemo(
+    () => JSON.stringify(sorting),
+    [sorting]
+  )
 
   React.useEffect(() => {
     if (bulkActions.length === 0) return
     setSelectedRowIds([])
-  }, [bulkActions.length, currentPage, filters, pageSize, sorting])
+  }, [bulkActions.length, currentPage, filtersSignature, pageSize, sortingSignature])
 
   React.useEffect(() => {
     if (bulkActions.length === 0) return

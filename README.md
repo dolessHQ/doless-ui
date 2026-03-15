@@ -50,6 +50,7 @@ Public props/types and extension surface:
 - `DataGridSavedView`, `DataGridViewSnapshot`, and `DataGridSavedViewAdapter` types are provided for host-owned saved-view implementations.
 - `DataGridRowAction` and `DataGridBulkAction` types are provided for host-owned action models.
 - `useDataGridController` + `DataGridLoader` for remote-load driven tables.
+- `useDataGridController` also exposes `hasInitialUrlState` so host surfaces can preserve URL-over-saved-view precedence when composing a `DataGrid`.
 
 Saved views behavior:
 - Snapshot model includes filters, sorting, page size, and all column layout state (visibility/order/pinning/sizing).
@@ -375,15 +376,16 @@ Props:
 ## Smoke Test
 
 Use the reusable smoke test to validate installability in a clean consumer app.
+It targets `http://localhost:3002` by default so it validates the current local registry surface.
 
 ```bash
 npm run smoke:data-grid
 ```
 
-Override registry host with:
+Override the registry host when you want to test a different local port or the deployed registry:
 
 ```bash
-REGISTRY_BASE_URL=http://localhost:3000 npm run smoke:data-grid
+REGISTRY_BASE_URL=https://doless-ui.vercel.app npm run smoke:data-grid
 ```
 
 The script creates a temporary Next app, runs `shadcn init`, installs both

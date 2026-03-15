@@ -530,6 +530,7 @@ export default function Home() {
     totalPages,
     isLoading,
     error,
+    hasInitialUrlState,
     setFilters,
     setSorting,
     setCurrentPage,
@@ -1008,6 +1009,7 @@ export default function Home() {
         totalPages={totalPages}
         onPageChange={setCurrentPage}
         onPageSizeChange={setPageSize}
+        hasInitialUrlState={hasInitialUrlState}
         isLoading={isLoading}
         error={error}
         onRefresh={refresh}

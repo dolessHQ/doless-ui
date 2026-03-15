@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-BASE_URL="${REGISTRY_BASE_URL:-https://doless-ui.vercel.app}"
+BASE_URL="${REGISTRY_BASE_URL:-http://localhost:3002}"
 SMOKE_APP_NAME="doless-data-grid-smoke-${RANDOM}-${RANDOM}"
 WORKDIR="$(mktemp -d)"
 APP_DIR="$WORKDIR/$SMOKE_APP_NAME"
@@ -76,8 +76,10 @@ import { DataGrid } from "${DATA_GRID_IMPORT}"
 import { DataGridPageShell } from "${PAGE_SHELL_IMPORT}"
 import {
   createDataGridStateCodec,
+  type DataGridBulkAction,
   type DataGridFilterDefinition,
   type DataGridLoaderArgs,
+  type DataGridRowAction,
   type DataGridSortState,
   useDataGridController,
 } from "${LIB_IMPORT}"
@@ -156,42 +158,6 @@ const SEED_DATA: Customer[] = [
   },
 ]
 
-const loadCustomers = async ({
-  page,
-  pageSize,
-  filters,
-  sorting,
-}: DataGridLoaderArgs<CustomerFilters, DataGridSortState>) => {
-  let rows = [...SEED_DATA]
-
-  if (filters.search) {
-    const search = filters.search.toLowerCase()
-    rows = rows.filter((row) => row.company.toLowerCase().includes(search))
-  }
-
-  if (filters.plan) {
-    rows = rows.filter((row) => row.plan === filters.plan)
-  }
-
-  if (sorting.length > 0) {
-    const sort = sorting[0]
-    rows = [...rows].sort((left, right) => {
-      const leftValue = String(left[sort.id as keyof Customer] ?? "")
-      const rightValue = String(right[sort.id as keyof Customer] ?? "")
-      const delta = leftValue.localeCompare(rightValue)
-      return sort.desc ? -delta : delta
-    })
-  }
-
-  const start = (page - 1) * pageSize
-  const totalCount = rows.length
-
-  return {
-    rows: rows.slice(start, start + pageSize),
-    totalCount,
-  }
-}
-
 const COLUMNS: ColumnDef<Customer>[] = [
   { accessorKey: "company", header: "Company", meta: { orderPriority: 1 } },
   { accessorKey: "plan", header: "Plan", meta: { orderPriority: 2 } },
@@ -206,6 +172,47 @@ const COLUMNS: ColumnDef<Customer>[] = [
 
 export default function DataGridSmokePage() {
   const tableId = "smoke-data-grid"
+  const [rowsState, setRowsState] = React.useState(SEED_DATA)
+  const [selectedId, setSelectedId] = React.useState<string | null>(SEED_DATA[0]?.id ?? null)
+  const loadCustomers = React.useCallback(
+    async ({
+      page,
+      pageSize,
+      filters,
+      sorting,
+    }: DataGridLoaderArgs<CustomerFilters, DataGridSortState>) => {
+      let rows = [...rowsState]
+
+      if (filters.search) {
+        const search = filters.search.toLowerCase()
+        rows = rows.filter((row) => row.company.toLowerCase().includes(search))
+      }
+
+      if (filters.plan) {
+        rows = rows.filter((row) => row.plan === filters.plan)
+      }
+
+      if (sorting.length > 0) {
+        const sort = sorting[0]
+        rows = [...rows].sort((left, right) => {
+          const leftValue = String(left[sort.id as keyof Customer] ?? "")
+          const rightValue = String(right[sort.id as keyof Customer] ?? "")
+          const delta = leftValue.localeCompare(rightValue)
+          return sort.desc ? -delta : delta
+        })
+      }
+
+      const start = (page - 1) * pageSize
+      const totalCount = rows.length
+
+      return {
+        rows: rows.slice(start, start + pageSize),
+        totalCount,
+      }
+    },
+    [rowsState]
+  )
+
   const controller = useDataGridController<Customer, CustomerFilters, DataGridSortState>({
     tableId,
     initialFilters: DEFAULT_FILTERS,
@@ -217,11 +224,59 @@ export default function DataGridSmokePage() {
     getRowId: (row) => row.id,
   })
 
+  const updateRows = React.useCallback((rowIds: string[], isActive: boolean) => {
+    const rowIdSet = new Set(rowIds)
+    setRowsState((currentRows) =>
+      currentRows.map((row) =>
+        rowIdSet.has(row.id) ? { ...row, isActive } : row
+      )
+    )
+    void controller.refresh()
+  }, [controller])
+
+  const rowActions = React.useMemo<Array<DataGridRowAction<Customer>>>(
+    () => [
+      {
+        label: "Open detail",
+        onSelect: (row) => setSelectedId(row.id),
+      },
+      {
+        label: "Deactivate",
+        variant: "outline",
+        isDisabled: (row) => !row.isActive,
+        onSelect: (row) => updateRows([row.id], false),
+      },
+    ],
+    [updateRows]
+  )
+
+  const bulkActions = React.useMemo<Array<DataGridBulkAction<Customer>>>(
+    () => [
+      {
+        label: "Mark active",
+        variant: "outline",
+        onSelect: (selectedRows) =>
+          updateRows(
+            selectedRows.map((row) => row.id),
+            true
+          ),
+      },
+    ],
+    [updateRows]
+  )
+
   return (
     <DataGridPageShell
       title="Data Grid Smoke App"
-      subtitle="Minimal registry install verification"
+      subtitle="Registry install verification with saved views and action surfaces compiled."
       className="mx-auto w-full"
+      detailPane={
+        selectedId ? (
+          <div className="rounded-xl border p-4 text-sm">
+            Selected row: {selectedId}
+          </div>
+        ) : null
+      }
     >
       <DataGrid
         tableId={tableId}
@@ -238,9 +293,15 @@ export default function DataGridSmokePage() {
         totalPages={controller.totalPages}
         onPageChange={controller.setCurrentPage}
         onPageSizeChange={controller.setPageSize}
+        hasInitialUrlState={controller.hasInitialUrlState}
         isLoading={controller.isLoading}
         error={controller.error}
         onRefresh={controller.refresh}
+        enableSavedViews
+        rowActions={rowActions}
+        bulkActions={bulkActions}
+        selectedRowId={selectedId}
+        onRowClick={(row) => setSelectedId(row.id)}
       />
     </DataGridPageShell>
   )
