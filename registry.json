@@ -4,6 +4,53 @@
   "homepage": "https://doless-ui.vercel.app/",
   "items": [
     {
+      "name": "data-grid",
+      "type": "registry:component",
+      "title": "Data Grid",
+      "description": "Composable table experience with schema-driven filters, URL state, exports, column controls, and runtime pinning.",
+      "dependencies": ["@tanstack/react-table", "lucide-react"],
+      "registryDependencies": [
+        "badge",
+        "button",
+        "calendar",
+        "card",
+        "input",
+        "label",
+        "popover",
+        "separator"
+      ],
+      "files": [
+        {
+          "path": "registry/new-york/doless/DataGrid.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "registry/new-york/doless/DateRangePicker.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "lib/date-utils.ts",
+          "type": "registry:lib"
+        },
+        {
+          "path": "lib/data-grid.ts",
+          "type": "registry:lib"
+        }
+      ]
+    },
+    {
+      "name": "data-grid-page-shell",
+      "type": "registry:component",
+      "title": "Data Grid Page Shell",
+      "description": "Full table shell with page header, actions, detail pane slot, footer slot, and dialog layer support.",
+      "files": [
+        {
+          "path": "registry/new-york/doless/DataGridPageShell.tsx",
+          "type": "registry:component"
+        }
+      ]
+    },
+    {
       "name": "color-picker-popover",
       "type": "registry:component",
       "title": "Color Picker Popover",
