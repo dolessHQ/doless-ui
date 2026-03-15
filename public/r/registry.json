@@ -27,6 +27,10 @@
         {
           "path": "registry/new-york/doless/DatePicker.tsx",
           "type": "registry:component"
+        },
+        {
+          "path": "lib/date-utils.ts",
+          "type": "registry:lib"
         }
       ]
     },
@@ -42,13 +46,16 @@
         "card",
         "label",
         "popover",
-        "separator",
-        "toggle-group"
+        "separator"
       ],
       "files": [
         {
           "path": "registry/new-york/doless/DateRangePicker.tsx",
           "type": "registry:component"
+        },
+        {
+          "path": "lib/date-utils.ts",
+          "type": "registry:lib"
         }
       ]
     },
@@ -63,6 +70,10 @@
         {
           "path": "registry/new-york/doless/MultiDatePicker.tsx",
           "type": "registry:component"
+        },
+        {
+          "path": "lib/date-utils.ts",
+          "type": "registry:lib"
         }
       ]
     }

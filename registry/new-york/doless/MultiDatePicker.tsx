@@ -1,16 +1,17 @@
 "use client"
 
 import * as React from "react"
-import { format, isValid, parseISO } from "date-fns"
+import { isValid, parseISO, startOfDay } from "date-fns"
 import { CalendarIcon, ChevronDownIcon, X } from "lucide-react"
 import type { Matcher } from "react-day-picker"
 
+import { formatDateSafe } from "@/lib/date-utils"
 import { cn } from "@/lib/utils"
-import { Card } from "@/registry/new-york/ui/card"
+import { Badge } from "@/registry/new-york/ui/badge"
 import { Button } from "@/registry/new-york/ui/button"
 import { Calendar } from "@/registry/new-york/ui/calendar"
+import { Card } from "@/registry/new-york/ui/card"
 import { Label } from "@/registry/new-york/ui/label"
-import { Badge } from "@/registry/new-york/ui/badge"
 import {
   Popover,
   PopoverContent,
@@ -32,7 +33,7 @@ export interface MultiDatePickerValue {
 export interface MultiDatePickerProps {
   label?: string
   id?: string
-  value?: string[] // Array of ISO date strings
+  value?: string[]
   defaultValue?: string[]
   onChange?: (value: MultiDatePickerValue) => void
   onBlur?: () => void
@@ -48,7 +49,8 @@ export interface MultiDatePickerProps {
   className?: string
   triggerClassName?: string
   calendarClassName?: string
-  maxDates?: number // Maximum number of dates that can be selected
+  maxDates?: number
+  selectionDisplay?: "count" | "dates" | "badges"
 }
 
 const parseDateInput = (value: DateInput): Date | null => {
@@ -66,44 +68,68 @@ const parseDateInput = (value: DateInput): Date | null => {
   return null
 }
 
+const normalizeDateArray = (dates: Date[]): Date[] => {
+  const seen = new Set<number>()
+
+  return dates
+    .map((date) => startOfDay(date))
+    .filter((date) => {
+      const key = date.getTime()
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    .sort((a, b) => a.getTime() - b.getTime())
+}
+
+const buildDateKey = (dates: Date[]) =>
+  normalizeDateArray(dates)
+    .map((date) => date.getTime())
+    .join(",")
+
 const buildValuePayload = (
   dates: Date[],
   displayFormat: string,
-  placeholder: string = "Select dates"
+  placeholder = "Select dates"
 ): MultiDatePickerValue => {
-  const formatDateSafe = (value: Date, pattern: string) => {
-    if (!value) return null
-    try {
-      return format(value, pattern)
-    } catch (error) {
-      console.warn("Failed to format date with pattern:", pattern, error)
-      return value.toLocaleDateString()
-    }
-  }
-
-  const sortedDates = [...dates].sort((a, b) => a.getTime() - b.getTime())
-  
-  const formatted = sortedDates.map(d => formatDateSafe(d, displayFormat)).filter((f): f is string => f !== null)
-  const iso = sortedDates.map(d => formatDateSafe(d, ISO_STORE_FORMAT)).filter((f): f is string => f !== null)
+  const normalizedDates = normalizeDateArray(dates)
+  const formatted = normalizedDates
+    .map((date) => formatDateSafe(date, displayFormat))
+    .filter((value): value is string => value !== null)
+  const iso = normalizedDates
+    .map((date) => formatDateSafe(date, ISO_STORE_FORMAT))
+    .filter((value): value is string => value !== null)
 
   return {
-    dates: sortedDates,
+    dates: normalizedDates,
     formatted,
     iso,
-    label: formatted.length > 0 
-      ? `${formatted.length} date${formatted.length !== 1 ? 's' : ''} selected`
-      : placeholder
+    label:
+      formatted.length > 0
+        ? `${formatted.length} date${formatted.length !== 1 ? "s" : ""} selected`
+        : placeholder,
   }
 }
 
-// Stable key for comparing date arrays without order sensitivity.
-const buildDateKey = (dates: Date[]) =>
-  dates
-    .map((date) => date.getTime())
-    .sort((a, b) => a - b)
-    .join(",")
+const buildDisplayLabel = ({
+  payload,
+  placeholder,
+  selectionDisplay,
+}: {
+  payload: MultiDatePickerValue
+  placeholder: string
+  selectionDisplay: "count" | "dates" | "badges"
+}) => {
+  if (payload.formatted.length === 0) return placeholder
+  if (selectionDisplay === "badges") return placeholder
+  if (selectionDisplay === "dates") return payload.formatted.join(", ")
+  return payload.label
+}
 
-export const MultiDatePicker = React.forwardRef<HTMLButtonElement, MultiDatePickerProps>(
+export const MultiDatePicker = React.forwardRef<
+  HTMLButtonElement,
+  MultiDatePickerProps
+>(
   (
     {
       label,
@@ -125,6 +151,7 @@ export const MultiDatePicker = React.forwardRef<HTMLButtonElement, MultiDatePick
       triggerClassName,
       calendarClassName,
       maxDates,
+      selectionDisplay = "count",
     },
     ref
   ) => {
@@ -134,12 +161,20 @@ export const MultiDatePicker = React.forwardRef<HTMLButtonElement, MultiDatePick
     const isControlled = value !== undefined
     const parsedValue = React.useMemo(() => {
       if (!value || !Array.isArray(value)) return []
-      return value.map(v => parseDateInput(v)).filter((d): d is Date => d !== null)
+      return normalizeDateArray(
+        value
+          .map((item) => parseDateInput(item))
+          .filter((item): item is Date => item !== null)
+      )
     }, [value])
-    
+
     const parsedDefault = React.useMemo(() => {
       if (!defaultValue || !Array.isArray(defaultValue)) return []
-      return defaultValue.map(v => parseDateInput(v)).filter((d): d is Date => d !== null)
+      return normalizeDateArray(
+        defaultValue
+          .map((item) => parseDateInput(item))
+          .filter((item): item is Date => item !== null)
+      )
     }, [defaultValue])
 
     const [internalDates, setInternalDates] = React.useState<Date[]>(
@@ -149,12 +184,10 @@ export const MultiDatePicker = React.forwardRef<HTMLButtonElement, MultiDatePick
     React.useEffect(() => {
       if (!isControlled) return
 
-      const valueDates = buildDateKey(parsedValue)
-      const internalDatesKey = buildDateKey(internalDates)
-      if (valueDates !== internalDatesKey) {
+      if (buildDateKey(parsedValue) !== buildDateKey(internalDates)) {
         setInternalDates(parsedValue)
       }
-    }, [isControlled, parsedValue, internalDates])
+    }, [internalDates, isControlled, parsedValue])
 
     const defaultDatesKey = React.useMemo(
       () => buildDateKey(parsedDefault),
@@ -169,7 +202,7 @@ export const MultiDatePicker = React.forwardRef<HTMLButtonElement, MultiDatePick
         lastDefaultKeyRef.current = defaultDatesKey
         setInternalDates(parsedDefault)
       }
-    }, [isControlled, parsedDefault, defaultDatesKey])
+    }, [defaultDatesKey, isControlled, parsedDefault])
 
     const selectedDates = isControlled ? parsedValue : internalDates
 
@@ -199,59 +232,77 @@ export const MultiDatePicker = React.forwardRef<HTMLButtonElement, MultiDatePick
       if (rules.length === 0) return undefined
       if (rules.length === 1) return rules[0]
       return rules
-    }, [parsedMinDate, parsedMaxDate, disabledDates])
+    }, [disabledDates, parsedMaxDate, parsedMinDate])
 
     const [open, setOpen] = React.useState(false)
     const lastEmittedRef = React.useRef<MultiDatePickerValue | null>(null)
 
     const displayValue = React.useMemo(() => {
       const payload = buildValuePayload(selectedDates, dateFormat, placeholder)
-      return payload.label
-    }, [selectedDates, dateFormat, placeholder])
+      return buildDisplayLabel({ payload, placeholder, selectionDisplay })
+    }, [dateFormat, placeholder, selectedDates, selectionDisplay])
+
+    const triggerBadgeValues = React.useMemo(() => {
+      if (selectionDisplay !== "badges") return []
+
+      return selectedDates
+        .map((date) => formatDateSafe(date, dateFormat))
+        .filter((value): value is string => Boolean(value))
+    }, [dateFormat, selectedDates, selectionDisplay])
 
     const emitChange = React.useCallback(
       (next: Date[]) => {
+        const normalizedNext = normalizeDateArray(next)
         if (!isControlled) {
-          setInternalDates(next)
+          setInternalDates(normalizedNext)
         }
 
-        const payload = buildValuePayload(next, dateFormat, placeholder)
+        const payload = buildValuePayload(
+          normalizedNext,
+          dateFormat,
+          placeholder
+        )
         const last = lastEmittedRef.current
         if (
           !last ||
-          last.iso.join(',') !== payload.iso.join(',') ||
-          last.formatted.join(',') !== payload.formatted.join(',')
+          last.iso.join(",") !== payload.iso.join(",") ||
+          last.formatted.join(",") !== payload.formatted.join(",")
         ) {
           lastEmittedRef.current = payload
           onChange?.(payload)
         }
       },
-      [isControlled, dateFormat, placeholder, onChange]
+      [dateFormat, isControlled, onChange, placeholder]
     )
 
     const handleSelect = (date: Date | undefined) => {
       if (!date) return
 
-      const dateTime = date.getTime()
-      const isSelected = selectedDates.some(d => d.getTime() === dateTime)
+      const normalizedDate = startOfDay(date)
+      const dateTime = normalizedDate.getTime()
+      const isSelected = selectedDates.some(
+        (selectedDate) => selectedDate.getTime() === dateTime
+      )
 
       let nextDates: Date[]
       if (isSelected) {
-        // Remove date
-        nextDates = selectedDates.filter(d => d.getTime() !== dateTime)
+        nextDates = selectedDates.filter(
+          (selectedDate) => selectedDate.getTime() !== dateTime
+        )
       } else {
-        // Add date (check max limit)
         if (maxDates && selectedDates.length >= maxDates) {
-          return // Don't add if max reached
+          return
         }
-        nextDates = [...selectedDates, date]
+        nextDates = [...selectedDates, normalizedDate]
       }
 
       emitChange(nextDates)
     }
 
     const handleRemoveDate = (dateToRemove: Date) => {
-      const nextDates = selectedDates.filter(d => d.getTime() !== dateToRemove.getTime())
+      const nextDates = selectedDates.filter(
+        (date) => date.getTime() !== dateToRemove.getTime()
+      )
       emitChange(nextDates)
     }
 
@@ -269,13 +320,11 @@ export const MultiDatePicker = React.forwardRef<HTMLButtonElement, MultiDatePick
     }
 
     const defaultMonth =
-      selectedDates.length > 0
-        ? selectedDates[0]
-        : parsedMinDate ?? parsedMaxDate ?? new Date()
-
-    // Derive year range from minDate/maxDate props, with sensible defaults
-    const fromYear = parsedMinDate?.getFullYear() ?? new Date().getFullYear() - 5;
-    const toYear = parsedMaxDate?.getFullYear() ?? new Date().getFullYear() + 5
+      selectedDates[0] ?? parsedMinDate ?? parsedMaxDate ?? new Date()
+    const fromYear =
+      parsedMinDate?.getFullYear() ?? new Date().getFullYear() - 5
+    const toYear =
+      parsedMaxDate?.getFullYear() ?? new Date().getFullYear() + 5
 
     return (
       <div className={cn("flex flex-col gap-2", className)}>
@@ -298,9 +347,23 @@ export const MultiDatePicker = React.forwardRef<HTMLButtonElement, MultiDatePick
                 triggerClassName
               )}
             >
-              <span className="flex items-center gap-2">
+              <span className="flex min-w-0 flex-1 items-center gap-2">
                 <CalendarIcon className="h-4 w-4" />
-                {displayValue}
+                {selectionDisplay === "badges" && triggerBadgeValues.length > 0 ? (
+                  <span className="flex min-w-0 flex-wrap gap-1.5">
+                    {triggerBadgeValues.map((value) => (
+                      <Badge
+                        key={`trigger-date-${value}`}
+                        variant="outline"
+                        className="h-5 border-border bg-muted/30 px-2 text-xs font-medium"
+                      >
+                        {value}
+                      </Badge>
+                    ))}
+                  </span>
+                ) : (
+                  <span className="truncate">{displayValue}</span>
+                )}
               </span>
               <ChevronDownIcon className="h-4 w-4 opacity-60" />
             </Button>
@@ -313,35 +376,33 @@ export const MultiDatePicker = React.forwardRef<HTMLButtonElement, MultiDatePick
               calendarClassName
             )}
           >
-            <Card className="border bg-background shadow-lg my-1 gap-0 py-0">
+            <Card className="my-1 gap-0 border bg-background py-0 shadow-lg">
               <div className="p-3">
-                {selectedDates.length > 0 && (
-                  <div className="mb-3 flex flex-wrap gap-2 max-w-full">
-                    {selectedDates
-                      .sort((a, b) => a.getTime() - b.getTime())
-                      .map((date) => (
-                        <Badge
-                          key={date.getTime()}
-                          variant="secondary"
-                          className="flex items-center gap-1 pr-1"
+                {selectedDates.length > 0 ? (
+                  <div className="mb-3 flex max-w-full flex-wrap gap-2">
+                    {selectedDates.map((date) => (
+                      <Badge
+                        key={date.getTime()}
+                        variant="secondary"
+                        className="flex items-center gap-1 pr-1"
+                      >
+                        {formatDateSafe(date, dateFormat)}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveDate(date)}
+                          className="ml-1 rounded-full p-0.5 hover:bg-destructive/20"
+                          disabled={disabled}
                         >
-                          {format(date, dateFormat)}
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveDate(date)}
-                            className="ml-1 rounded-full hover:bg-destructive/20 p-0.5"
-                            disabled={disabled}
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </Badge>
-                      ))}
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
                   </div>
-                )}
+                ) : null}
                 <Calendar
                   initialFocus
                   mode="single"
-                  selected={undefined} // Don't show single selection highlight
+                  selected={undefined}
                   onSelect={handleSelect}
                   numberOfMonths={numberOfMonths}
                   defaultMonth={defaultMonth}
@@ -351,19 +412,22 @@ export const MultiDatePicker = React.forwardRef<HTMLButtonElement, MultiDatePick
                   toYear={toYear}
                   modifiers={{
                     selected: (date) =>
-                      selectedDates.some((d) => d.getTime() === date.getTime()),
+                      selectedDates.some(
+                        (selectedDate) =>
+                          selectedDate.getTime() === startOfDay(date).getTime()
+                      ),
                   }}
                   modifiersClassNames={{
-                    selected: "bg-primary text-primary-foreground rounded-md",
+                    selected: "rounded-md bg-primary text-primary-foreground",
                   }}
                 />
-                {maxDates && (
+                {maxDates ? (
                   <div className="px-3 pb-2 text-xs text-muted-foreground">
                     {selectedDates.length} / {maxDates} dates selected
                   </div>
-                )}
+                ) : null}
               </div>
-              {clearable && selectedDates.length > 0 && (
+              {clearable && selectedDates.length > 0 ? (
                 <div className="border-t border-border p-2">
                   <Button
                     type="button"
@@ -376,7 +440,7 @@ export const MultiDatePicker = React.forwardRef<HTMLButtonElement, MultiDatePick
                     {clearLabel}
                   </Button>
                 </div>
-              )}
+              ) : null}
             </Card>
           </PopoverContent>
         </Popover>

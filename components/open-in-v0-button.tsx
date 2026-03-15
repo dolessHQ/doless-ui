@@ -1,3 +1,6 @@
+"use client"
+
+import * as React from "react"
 import { Button } from "@/registry/new-york/ui/button"
 import { cn } from "@/lib/utils"
 
@@ -5,6 +8,14 @@ export function OpenInV0Button({
   name,
   className,
 }: { name: string } & React.ComponentProps<typeof Button>) {
+  const [baseUrl, setBaseUrl] = React.useState(process.env.NEXT_PUBLIC_BASE_URL ?? "")
+
+  React.useEffect(() => {
+    if (!baseUrl && typeof window !== "undefined") {
+      setBaseUrl(window.location.origin)
+    }
+  }, [baseUrl])
+
   return (
     <Button
       aria-label="Open in v0"
@@ -16,7 +27,7 @@ export function OpenInV0Button({
       asChild
     >
       <a
-        href={`https://v0.dev/chat/api/open?url=${process.env.NEXT_PUBLIC_BASE_URL}/r/${name}.json`}
+        href={`https://v0.dev/chat/api/open?url=${baseUrl}/r/${name}.json`}
         target="_blank"
         rel="noreferrer"
       >

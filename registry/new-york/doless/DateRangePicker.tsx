@@ -1,40 +1,39 @@
 "use client"
 
 import * as React from "react"
-import { ChevronDownIcon, CalendarIcon } from "lucide-react"
+import { CalendarIcon, ChevronDownIcon } from "lucide-react"
 import { type DateRange } from "react-day-picker"
 import {
-  format,
-  parseISO,
-  isValid,
-  startOfDay,
-  isAfter,
-  startOfWeek,
-  endOfWeek,
-  addWeeks,
-  subWeeks,
-  startOfMonth,
-  endOfMonth,
   addMonths,
+  addWeeks,
+  endOfMonth,
+  endOfWeek,
+  isAfter,
+  isValid,
+  parseISO,
+  startOfDay,
+  startOfMonth,
+  startOfWeek,
   subMonths,
+  subWeeks,
 } from "date-fns"
 
+import { formatDateSafe } from "@/lib/date-utils"
 import { cn } from "@/lib/utils"
 import { Button } from "@/registry/new-york/ui/button"
 import { Calendar } from "@/registry/new-york/ui/calendar"
-import { Label } from "@/registry/new-york/ui/label"
 import {
   Card,
   CardContent,
   CardFooter,
 } from "@/registry/new-york/ui/card"
+import { Label } from "@/registry/new-york/ui/label"
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/registry/new-york/ui/popover"
-import { Separator } from "@/registry/new-york/ui/separator";
-import { ToggleGroup, ToggleGroupItem } from "@/registry/new-york/ui/toggle-group"
+import { Separator } from "@/registry/new-york/ui/separator"
 
 const DEFAULT_DISPLAY_FORMAT = "MMM d"
 const ISO_STORE_FORMAT = "yyyy-MM-dd"
@@ -103,7 +102,7 @@ const parseDateInput = (value: Date | string | null | undefined) => {
   return undefined
 }
 
-const datesEqual = (a?: Date, b?: Date) => {
+const datesEqual = (a?: Date | null, b?: Date | null) => {
   if (!a && !b) return true
   if (!a || !b) return false
   return a.getTime() === b.getTime()
@@ -117,8 +116,6 @@ const buildUpdatePayload = (
   const rawFrom = range?.from ?? null
   const rawTo = range?.to ?? null
 
-  // Canonicalize emitted bounds by mode.
-  // `react-day-picker` always selects a `from` date first; in "before" mode we treat that as `to`.
   let from: Date | null = rawFrom
   let to: Date | null = rawTo
 
@@ -136,19 +133,8 @@ const buildUpdatePayload = (
     from = null
   }
 
-  const formatDateSafe = (date: Date | null, pattern: string) => {
-    if (!date) return null
-    try {
-      return format(date, pattern)
-    } catch (error) {
-      console.warn("Failed to format date with pattern:", pattern, error)
-      return date.toLocaleDateString()
-    }
-  }
-
   const formattedFrom = formatDateSafe(from, displayFormat)
   const formattedTo = formatDateSafe(to, displayFormat)
-
   const isoFrom = formatDateSafe(from, ISO_STORE_FORMAT)
   const isoTo = formatDateSafe(to, ISO_STORE_FORMAT)
 
@@ -158,11 +144,11 @@ const buildUpdatePayload = (
   } else if (mode === "before" && formattedTo) {
     label = `Before ${formattedTo}`
   } else if (formattedFrom && formattedTo) {
-    label = `${formattedFrom} – ${formattedTo}`
+    label = `${formattedFrom} - ${formattedTo}`
   } else if (formattedFrom) {
-    label = `${formattedFrom} –`
+    label = `${formattedFrom} -`
   } else if (formattedTo) {
-    label = `– ${formattedTo}`
+    label = `- ${formattedTo}`
   }
 
   return {
@@ -212,49 +198,34 @@ export function DateRangePicker({
   const today = React.useMemo(() => startOfDay(new Date()), [])
 
   const normalizedModes = React.useMemo<DateRangeSelectionMode[]>(() => {
-    const unique = Array.from(new Set<DateRangeSelectionMode>(modes)) as DateRangeSelectionMode[]
+    const unique = Array.from(
+      new Set<DateRangeSelectionMode>(modes)
+    ) as DateRangeSelectionMode[]
     return unique.length > 0 ? unique : ["range"]
   }, [modes])
 
-  const [selectionMode, setSelectionMode] = React.useState<DateRangeSelectionMode>(() => {
-    return normalizedModes.includes(initialMode) ? initialMode : normalizedModes[0] ?? "range"
-  })
-
-  const buildSingleDayRange = React.useCallback((value: Date | null | undefined): DateRange | undefined => {
-    if (!value) return undefined
-    const day = startOfDay(value)
-    return { from: day, to: day }
-  }, [])
-
-  // Keep selectionMode in sync if parent changes initialMode (e.g., URL-driven filters)
-  React.useEffect(() => {
-    if (!normalizedModes.includes(initialMode)) return
-
-    setSelectionMode((current) => (current === initialMode ? current : initialMode))
-
-    setRange((current) => {
-      if (initialMode === "after") {
-        const nextFrom = parseDateInput(initialDateFrom) ?? parseDateInput(initialDateTo)
-        const next = buildSingleDayRange(nextFrom)
-        if (next && datesEqual(current?.from, next.from) && datesEqual(current?.to, next.to)) {
-          return current
-        }
-        return next
-      }
-      if (initialMode === "before") {
-        const nextTo = parseDateInput(initialDateTo) ?? parseDateInput(initialDateFrom)
-        const next = buildSingleDayRange(nextTo)
-        if (next && datesEqual(current?.from, next.from) && datesEqual(current?.to, next.to)) {
-          return current
-        }
-        return next
-      }
-      return current
+  const [selectionMode, setSelectionMode] =
+    React.useState<DateRangeSelectionMode>(() => {
+      return normalizedModes.includes(initialMode)
+        ? initialMode
+        : normalizedModes[0] ?? "range"
     })
-  }, [initialMode, initialDateFrom, initialDateTo, normalizedModes, buildSingleDayRange])
+  const selectionModeRef = React.useRef(selectionMode)
+  selectionModeRef.current = selectionMode
 
-  const isInitialFromProvided = initialDateFrom !== undefined && initialDateFrom !== null
-  const isInitialToProvided = initialDateTo !== undefined && initialDateTo !== null
+  const buildSingleDayRange = React.useCallback(
+    (value: Date | null | undefined): DateRange | undefined => {
+      if (!value) return undefined
+      const day = startOfDay(value)
+      return { from: day, to: day }
+    },
+    []
+  )
+
+  const isInitialFromProvided =
+    initialDateFrom !== undefined && initialDateFrom !== null
+  const isInitialToProvided =
+    initialDateTo !== undefined && initialDateTo !== null
 
   const parsedInitialFrom = React.useMemo(
     () => parseDateInput(initialDateFrom),
@@ -294,7 +265,6 @@ export function DateRangePicker({
       }
 
       if (normalizedTo) {
-        // Edge case: only end provided. Treat as single-day range.
         return {
           from: normalizedTo,
           to: normalizedTo,
@@ -315,14 +285,28 @@ export function DateRangePicker({
       const seedFrom = parsedInitialFrom ?? parsedInitialTo
       return buildSingleDayRange(seedFrom)
     }
+
     if (selectionMode === "before") {
       const seedTo = parsedInitialTo ?? parsedInitialFrom
       return buildSingleDayRange(seedTo)
     }
 
-    return buildRange(parsedInitialFrom ?? undefined, parsedInitialTo ?? undefined, true)
+    return buildRange(
+      parsedInitialFrom ?? undefined,
+      parsedInitialTo ?? undefined,
+      true
+    )
   })
+  const rangeRef = React.useRef(range)
+  rangeRef.current = range
+
   const [activePreset, setActivePreset] = React.useState<string | null>(null)
+
+  const defaultMonth =
+    range?.from ?? parsedInitialFrom ?? parsedInitialTo ?? today
+  const [visibleMonth, setVisibleMonth] = React.useState<Date>(() =>
+    startOfMonth(defaultMonth)
+  )
 
   const clearSelection = React.useCallback(() => {
     setRange(undefined)
@@ -335,23 +319,38 @@ export function DateRangePicker({
   )
 
   const lastEmittedRef = React.useRef<DateRangePickerUpdate | null>(updatePayload)
+  const suppressNextEmitRef = React.useRef(false)
 
   const displayValue = React.useMemo(() => {
     if (updatePayload.formatted.from || updatePayload.formatted.to) {
       return updatePayload.formatted.label
     }
     return placeholder
-  }, [updatePayload, placeholder])
+  }, [placeholder, updatePayload])
+
+  const getRangeAnchorMonth = React.useCallback((value?: DateRange) => {
+    const anchor = value?.from ?? value?.to
+    return anchor ? startOfMonth(anchor) : undefined
+  }, [])
 
   const applySelection = React.useCallback(
-    (nextRange: DateRange | undefined, mode: DateRangeSelectionMode) => {
+    (
+      nextRange: DateRange | undefined,
+      mode: DateRangeSelectionMode,
+      selectedDay?: Date
+    ) => {
       if (!nextRange || (!nextRange.from && !nextRange.to)) {
+        if ((mode === "after" || mode === "before") && selectedDay) {
+          setRange(buildSingleDayRange(selectedDay))
+          setActivePreset(null)
+          return
+        }
         clearSelection()
         return
       }
 
       if (mode === "after") {
-        const nextFrom = nextRange.to ?? nextRange.from
+        const nextFrom = selectedDay ?? nextRange.to ?? nextRange.from
         if (!nextFrom) {
           clearSelection()
           return
@@ -362,8 +361,7 @@ export function DateRangePicker({
       }
 
       if (mode === "before") {
-        // In range-selection mode, the calendar sets `from` first. Treat that as `to`.
-        const nextTo = nextRange.to ?? nextRange.from
+        const nextTo = selectedDay ?? nextRange.to ?? nextRange.from
         if (!nextTo) {
           clearSelection()
           return
@@ -390,26 +388,22 @@ export function DateRangePicker({
     [buildRange, buildSingleDayRange, clearSelection]
   )
 
-  const handleSelect = (nextRange: DateRange | undefined) => {
-    if (!nextRange || (!nextRange.from && !nextRange.to)) {
-      clearSelection()
-      return
-    }
-
-    applySelection(nextRange, selectionMode)
+  const handleSelect = (nextRange: DateRange | undefined, selectedDay?: Date) => {
+    applySelection(nextRange, selectionMode, selectedDay)
   }
 
   React.useEffect(() => {
-    if (!isInitialFromProvided && !isInitialToProvided) {
-      clearSelection()
-      return
-    }
+    const syncMode = normalizedModes.includes(initialMode)
+      ? initialMode
+      : normalizedModes[0] ?? "range"
 
     let nextRange: DateRange | undefined
-    if (selectionMode === "after") {
+    if (!isInitialFromProvided && !isInitialToProvided) {
+      nextRange = undefined
+    } else if (syncMode === "after") {
       const seedFrom = parsedInitialFrom ?? parsedInitialTo
       nextRange = buildSingleDayRange(seedFrom)
-    } else if (selectionMode === "before") {
+    } else if (syncMode === "before") {
       const seedTo = parsedInitialTo ?? parsedInitialFrom
       nextRange = buildSingleDayRange(seedTo)
     } else {
@@ -423,41 +417,67 @@ export function DateRangePicker({
           : undefined
     }
 
-    setRange((previous) => {
-      if (
-        datesEqual(previous?.from, nextRange?.from) &&
-        datesEqual(previous?.to, nextRange?.to)
-      ) {
-        return previous
-      }
+    const currentSelectionMode = selectionModeRef.current
+    const currentRange = rangeRef.current
+
+    const modeChanged = currentSelectionMode !== syncMode
+    const rangeChanged =
+      !datesEqual(currentRange?.from, nextRange?.from) ||
+      !datesEqual(currentRange?.to, nextRange?.to)
+
+    if (!modeChanged && !rangeChanged) {
+      return
+    }
+
+    suppressNextEmitRef.current = true
+
+    if (modeChanged) {
+      setSelectionMode(syncMode)
+      selectionModeRef.current = syncMode
+    }
+
+    if (rangeChanged) {
       debugLog("[DateRangePicker] sync range from props", {
-        selectionMode,
+        syncMode,
         initialMode,
         initialDateFrom,
         initialDateTo,
         parsedInitialFrom,
         parsedInitialTo,
-        previous,
+        previous: currentRange,
         nextRange,
       })
-      return nextRange
-    })
+      setRange(nextRange)
+      rangeRef.current = nextRange
+
+      const nextMonth = getRangeAnchorMonth(nextRange)
+      if (nextMonth) {
+        setVisibleMonth(nextMonth)
+      }
+    }
   }, [
-    isInitialFromProvided,
-    isInitialToProvided,
     buildRange,
-    parsedInitialFrom,
-    parsedInitialTo,
-    clearSelection,
-    selectionMode,
-    initialMode,
+    buildSingleDayRange,
+    getRangeAnchorMonth,
     initialDateFrom,
     initialDateTo,
-    buildSingleDayRange,
+    initialMode,
+    isInitialFromProvided,
+    isInitialToProvided,
+    normalizedModes,
+    parsedInitialFrom,
+    parsedInitialTo,
   ])
 
   React.useEffect(() => {
     if (!onUpdate) return
+
+    if (suppressNextEmitRef.current) {
+      suppressNextEmitRef.current = false
+      lastEmittedRef.current = updatePayload
+      debugLog("[DateRangePicker] suppress emit (prop sync)", updatePayload)
+      return
+    }
 
     const last = lastEmittedRef.current
     if (
@@ -475,27 +495,19 @@ export function DateRangePicker({
     lastEmittedRef.current = updatePayload
     debugLog("[DateRangePicker] emit", updatePayload)
     onUpdate(updatePayload)
-  }, [updatePayload, onUpdate])
+  }, [onUpdate, updatePayload])
 
   const inputId = id ?? generatedId
-  const defaultMonth =
-    range?.from ?? parsedInitialFrom ?? parsedInitialTo ?? today
-  const [month, setMonth] = React.useState<Date>(() => defaultMonth)
   const monthsToShow = Math.max(1, numberOfMonths || 1)
 
-  // Normalize the current selection for the next mode.
   const deriveRangeForMode = React.useCallback(
     (current: DateRange | undefined, nextMode: DateRangeSelectionMode) => {
       if (!current) return undefined
 
-      const anchor = current.to ?? current.from
+      const anchor = current.from ?? current.to
       const anchorDay = anchor ? startOfDay(anchor) : null
 
-      if (nextMode === "after") {
-        return buildSingleDayRange(anchorDay)
-      }
-
-      if (nextMode === "before") {
+      if (nextMode === "after" || nextMode === "before") {
         return buildSingleDayRange(anchorDay)
       }
 
@@ -507,43 +519,28 @@ export function DateRangePicker({
 
       if (!anchorDay) return undefined
 
-      const todayStart = today
-      const end = isAfter(anchorDay, todayStart) ? anchorDay : todayStart
+      const end = isAfter(anchorDay, today) ? anchorDay : today
       return { from: anchorDay, to: end }
     },
     [buildSingleDayRange, today]
   )
 
-  const getMonthForMode = React.useCallback(
-    (nextRange: DateRange | undefined, nextMode: DateRangeSelectionMode) => {
-      if (!nextRange) return null
-      const anchor =
-        nextMode === "range"
-          ? nextRange.from ?? nextRange.to
-          : nextRange.to ?? nextRange.from
-      return anchor ? startOfDay(anchor) : null
-    },
-    []
-  )
-
   const applyPreset = (key: string, start: Date, end: Date) => {
     setSelectionMode("range")
     setActivePreset(key)
-    setRange(buildRange(start, end, false) ?? undefined)
-    setMonth(start)
+    const nextRange = buildRange(start, end, false) ?? undefined
+    setRange(nextRange)
+    setVisibleMonth(startOfMonth(start))
   }
 
-  const getWeekBoundaries = React.useCallback(
-    (reference: Date) => {
-      const weekStart = startOfWeek(reference, { weekStartsOn: 1 })
-      const weekEnd = endOfWeek(reference, { weekStartsOn: 1 })
-      return {
-        start: startOfDay(weekStart),
-        end: startOfDay(weekEnd),
-      }
-    },
-    []
-  )
+  const getWeekBoundaries = React.useCallback((reference: Date) => {
+    const weekStart = startOfWeek(reference, { weekStartsOn: 1 })
+    const weekEnd = endOfWeek(reference, { weekStartsOn: 1 })
+    return {
+      start: startOfDay(weekStart),
+      end: startOfDay(weekEnd),
+    }
+  }, [])
 
   const presetRanges = React.useMemo(() => {
     const thisWeek = getWeekBoundaries(today)
@@ -569,7 +566,11 @@ export function DateRangePicker({
     }
   }, [getWeekBoundaries, today])
 
-  const presetButton = (key: string, label: string, rangeValue: { start: Date; end: Date }) => (
+  const presetButton = (
+    key: string,
+    label: string,
+    rangeValue: { start: Date; end: Date }
+  ) => (
     <Button
       key={key}
       type="button"
@@ -580,6 +581,12 @@ export function DateRangePicker({
       {label}
     </Button>
   )
+
+  const modeLabelMap: Record<DateRangeSelectionMode, string> = {
+    before: "Before",
+    range: "Range",
+    after: "After",
+  }
 
   return (
     <div className={cn("flex flex-col gap-2", className)}>
@@ -608,56 +615,51 @@ export function DateRangePicker({
           </Button>
         </PopoverTrigger>
         <PopoverContent
-          className={cn("min-w-[340px] border-none bg-transparent p-0.5", calendarClassName)}
+          className={cn(
+            "min-w-[340px] border-none bg-transparent p-0.5",
+            calendarClassName
+          )}
           align="start"
         >
-          <Card className="border bg-background shadow-lg my-1">
-            <CardContent className="px-3 -mt-2.5">
+          <Card className="my-1 border bg-background shadow-lg">
+            <CardContent className="-mt-2.5 px-3">
               {normalizedModes.length > 1 ? (
                 <div className="flex items-center justify-center pb-3 pt-1">
-                  <ToggleGroup
-                    type="single"
-                    value={selectionMode}
-                    onValueChange={(value) => {
-                      if (!value) return
-                      const nextMode = value as DateRangeSelectionMode
-                      if (nextMode === selectionMode) return
-                      const nextRange = deriveRangeForMode(range, nextMode)
-                      const nextMonth = getMonthForMode(nextRange, nextMode)
-                      setSelectionMode(nextMode)
-                      setActivePreset(null)
-                      setRange(nextRange)
-                      if (nextMonth) {
-                        setMonth(nextMonth)
-                      }
-                    }}
-                    className="w-full"
-                  >
-                    {normalizedModes.includes("before") ? (
-                      <ToggleGroupItem value="before" className="flex-1 text-xs">
-                        Before
-                      </ToggleGroupItem>
-                    ) : null}
-                    {normalizedModes.includes("range") ? (
-                      <ToggleGroupItem value="range" className="flex-1 text-xs">
-                        Range
-                      </ToggleGroupItem>
-                    ) : null}
-                    {normalizedModes.includes("after") ? (
-                      <ToggleGroupItem value="after" className="flex-1 text-xs">
-                        After
-                      </ToggleGroupItem>
-                    ) : null}
-                  </ToggleGroup>
+                  <div className="grid w-full grid-cols-3 gap-1 rounded-lg border bg-muted/30 p-1">
+                    {normalizedModes.map((mode) => (
+                      <Button
+                        key={mode}
+                        type="button"
+                        size="sm"
+                        variant={selectionMode === mode ? "default" : "ghost"}
+                        className="h-8 w-full text-xs"
+                        onClick={() => {
+                          if (mode === selectionMode) return
+
+                          const nextRange = deriveRangeForMode(range, mode)
+                          const nextMonth = getRangeAnchorMonth(nextRange)
+
+                          setSelectionMode(mode)
+                          setActivePreset(null)
+                          setRange(nextRange)
+
+                          if (nextMonth) {
+                            setVisibleMonth(nextMonth)
+                          }
+                        }}
+                      >
+                        {modeLabelMap[mode]}
+                      </Button>
+                    ))}
+                  </div>
                 </div>
               ) : null}
               <Calendar
                 className="w-full"
                 initialFocus
                 mode="range"
-                defaultMonth={defaultMonth}
-                month={month}
-                onMonthChange={setMonth}
+                month={visibleMonth}
+                onMonthChange={setVisibleMonth}
                 selected={range}
                 onSelect={handleSelect}
                 numberOfMonths={monthsToShow}
@@ -666,39 +668,36 @@ export function DateRangePicker({
                 toYear={2030}
               />
             </CardContent>
-
-              <CardFooter className="flex-col  pt-2 -mb-2">
+            <CardFooter className="-mb-2 flex-col pt-2">
               {showPresets && selectionMode === "range" ? (
-                <div className="flex-col gap-3 mt-3 border-t pt-3">
-                  <div className="grid grid-cols-3 gap-2 w-full">
+                <div className="mt-3 flex-col gap-3 border-t pt-3">
+                  <div className="grid w-full grid-cols-3 gap-2">
                     {presetButton("lastWeek", "Last Week", presetRanges.lastWeek)}
                     {presetButton("thisWeek", "This Week", presetRanges.thisWeek)}
                     {presetButton("nextWeek", "Next Week", presetRanges.nextWeek)}
                   </div>
-                  <div className="grid grid-cols-3 gap-2 w-full mt-2">
+                  <div className="mt-2 grid w-full grid-cols-3 gap-2">
                     {presetButton("lastMonth", "Last Month", presetRanges.lastMonth)}
-                    {presetButton("thisMonth", "This Month", presetRanges.thisMonth)}                    
+                    {presetButton("thisMonth", "This Month", presetRanges.thisMonth)}
                     {presetButton("nextMonth", "Next Month", presetRanges.nextMonth)}
                   </div>
                 </div>
               ) : null}
-                {showPresets && clearable ? <Separator className="my-4" /> : null}
-                {clearable ? (
-                  <div className="pt-2">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={clearSelection}
-                      disabled={!range?.from && !range?.to}
-                    >
-                      {clearLabel}
-                    </Button>
-                  </div>
-                ) : null}
-              </CardFooter>
-            
-            
+              {showPresets && clearable ? <Separator className="my-4" /> : null}
+              {clearable ? (
+                <div className="pt-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={clearSelection}
+                    disabled={!range?.from && !range?.to}
+                  >
+                    {clearLabel}
+                  </Button>
+                </div>
+              ) : null}
+            </CardFooter>
           </Card>
         </PopoverContent>
       </Popover>

@@ -1,10 +1,11 @@
 "use client"
 
 import * as React from "react"
-import { format, isValid, parseISO } from "date-fns"
+import { isValid, parseISO } from "date-fns"
 import { CalendarIcon, ChevronDownIcon } from "lucide-react"
 import type { Matcher } from "react-day-picker"
 
+import { formatDateSafe } from "@/lib/date-utils"
 import { cn } from "@/lib/utils"
 import { Button } from "@/registry/new-york/ui/button"
 import { Calendar } from "@/registry/new-york/ui/calendar"
@@ -73,16 +74,6 @@ const buildValuePayload = (
   date: Date | null,
   displayFormat: string
 ): DatePickerValue => {
-  const formatDateSafe = (value: Date | null, pattern: string) => {
-    if (!value) return null
-    try {
-      return format(value, pattern)
-    } catch (error) {
-      console.warn("Failed to format date with pattern:", pattern, error)
-      return value.toLocaleDateString()
-    }
-  }
-
   const formatted = formatDateSafe(date, displayFormat)
   const iso = formatDateSafe(date, ISO_STORE_FORMAT)
 
