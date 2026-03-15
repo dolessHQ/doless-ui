@@ -448,7 +448,8 @@ const getPinnedCellStyles = <
   TValue,
 >(
   headerOrColumn: Header<TData, TValue>["column"],
-  stickyEnabled: boolean
+  stickyEnabled: boolean,
+  layer: "header" | "cell" = "cell"
 ): React.CSSProperties => {
   const pinnedSide = stickyEnabled ? headerOrColumn.getIsPinned() : false
   const baseSize = headerOrColumn.getSize()
@@ -477,7 +478,7 @@ const getPinnedCellStyles = <
         ? `${headerOrColumn.getAfter("right")}px`
         : undefined,
     boxShadow: shadow,
-    zIndex: pinnedSide ? 3 : 1,
+    zIndex: pinnedSide ? (layer === "header" ? 30 : 10) : undefined,
   }
 }
 
@@ -1933,7 +1934,7 @@ export function DataGrid<TData extends RowData, TFilters>({
                       <th
                         key={header.id}
                         colSpan={header.colSpan}
-                        style={getPinnedCellStyles(header.column, pinningEnabled)}
+                        style={getPinnedCellStyles(header.column, pinningEnabled, "header")}
                         className={cn(
                           "border-b bg-background px-4 py-3 text-left align-middle text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground",
                           "sticky top-0 z-20",
