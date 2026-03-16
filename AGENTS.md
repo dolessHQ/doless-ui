@@ -12,7 +12,7 @@ This repository is the centralized custom shadcn registry for the organization.
 
 - Authored registry metadata lives in `registry.json`.
 - Authored installable source lives primarily under `registry/new-york/**`.
-- Shared generic installable helpers may also live outside `registry/` when explicitly listed in `registry.json`. The current example is `lib/date-utils.ts`.
+- Shared generic installable helpers may also live outside `registry/` when explicitly listed in `registry.json`. The current example is `lib/doless-ui/date-utils.ts`.
 - Generated registry payloads live under `public/r/**` and must not be hand-edited.
 
 ## Registry Rules
@@ -43,5 +43,5 @@ This repository is the centralized custom shadcn registry for the organization.
   - `registry/new-york/doless/DateRangePicker.tsx`
   - `registry/new-york/doless/MultiDatePicker.tsx`
   - `registry/new-york/doless/ColorPickerPopover.tsx`
-- For date components, `lib/date-utils.ts` is the shared generic formatting helper. Keep it domain-agnostic.
+- For date components, `lib/doless-ui/date-utils.ts` is the shared generic formatting helper. Keep it domain-agnostic.
 - Breaking internal rewrites are acceptable when improving these components, but avoid gratuitous API churn once downstream consumers exist.

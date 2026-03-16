@@ -19,7 +19,7 @@ Required dependencies:
 - `@tanstack/react-table`
 - `lucide-react`
 - registry dependencies: `badge`, `button`, `calendar`, `card`, `input`, `label`, `popover`, `separator`
-- installable helper: `lib/data-grid.ts`
+- installable helpers: `lib/data-grid.ts`, `lib/doless-ui/date-utils.ts`
 
 Required imports after install:
 - `import { DataGrid } from "@/components/DataGrid"`

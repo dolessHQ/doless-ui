@@ -18,7 +18,7 @@ import {
   subWeeks,
 } from "date-fns"
 
-import { formatDateSafe } from "@/lib/date-utils"
+import { formatDateSafe } from "@/lib/doless-ui/date-utils"
 import { cn } from "@/lib/utils"
 import { Button } from "@/registry/new-york/ui/button"
 import { Calendar } from "@/registry/new-york/ui/calendar"

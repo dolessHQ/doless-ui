@@ -29,7 +29,7 @@
           "type": "registry:component"
         },
         {
-          "path": "lib/date-utils.ts",
+          "path": "lib/doless-ui/date-utils.ts",
           "type": "registry:lib"
         },
         {
@@ -76,7 +76,7 @@
           "type": "registry:component"
         },
         {
-          "path": "lib/date-utils.ts",
+          "path": "lib/doless-ui/date-utils.ts",
           "type": "registry:lib"
         }
       ]
@@ -101,7 +101,7 @@
           "type": "registry:component"
         },
         {
-          "path": "lib/date-utils.ts",
+          "path": "lib/doless-ui/date-utils.ts",
           "type": "registry:lib"
         }
       ]
@@ -119,7 +119,7 @@
           "type": "registry:component"
         },
         {
-          "path": "lib/date-utils.ts",
+          "path": "lib/doless-ui/date-utils.ts",
           "type": "registry:lib"
         }
       ]
