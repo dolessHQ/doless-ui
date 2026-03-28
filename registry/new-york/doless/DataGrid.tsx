@@ -56,6 +56,7 @@ import type {
   DataGridViewSnapshot,
 } from "@/lib/data-grid"
 import {
+  hydrateDataGridViewSnapshot,
   readDataGridPreferences,
   readDataGridSavedViews,
   writeDataGridPreferences,
@@ -157,6 +158,11 @@ const createSavedViewId = () => {
 
   return `view-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
+
+const buildPageSizeOptions = (pageSize: number) =>
+  Array.from(new Set([...DEFAULT_PAGE_SIZES, pageSize]))
+    .filter((value) => Number.isFinite(value) && value > 0)
+    .sort((left, right) => left - right)
 
 const getColumnId = <TData extends RowData, TValue>(
   column: ColumnDef<TData, TValue>
@@ -1336,14 +1342,56 @@ export function DataGrid<TData extends RowData, TFilters>({
   mobilePinningBreakpoint = 1024,
   className,
 }: DataGridProps<TData, TFilters>) {
+  const defaultPreferenceColumns = React.useMemo<Array<ColumnDef<TData, unknown>>>(() => {
+    const nextColumns: Array<ColumnDef<TData, unknown>> = []
+
+    if (bulkActions.length > 0) {
+      nextColumns.push({
+        id: "__selection",
+        size: 52,
+        minSize: 52,
+        maxSize: 52,
+        meta: {
+          label: "Select",
+          defaultPinned: "left",
+          align: "center",
+          orderPriority: -100,
+          minSize: 52,
+          maxSize: 52,
+        },
+      })
+    }
+
+    nextColumns.push(...columns)
+
+    if (rowActions.length > 0) {
+      nextColumns.push({
+        id: "__row_actions",
+        size: 72,
+        minSize: 72,
+        maxSize: 72,
+        meta: {
+          label: "Actions",
+          defaultPinned: "right",
+          align: "right",
+          orderPriority: Number.MAX_SAFE_INTEGER - 1,
+          minSize: 72,
+          maxSize: 72,
+        },
+      })
+    }
+
+    return nextColumns
+  }, [bulkActions.length, columns, rowActions.length])
+
   const defaultPreferences = React.useMemo<DataGridStoredPreferences>(
     () => ({
-      columnVisibility: buildDefaultColumnVisibility(columns),
-      columnOrder: buildDefaultColumnOrder(columns),
-      columnPinning: buildDefaultColumnPinning(columns),
-      columnSizing: buildDefaultColumnSizing(columns),
+      columnVisibility: buildDefaultColumnVisibility(defaultPreferenceColumns),
+      columnOrder: buildDefaultColumnOrder(defaultPreferenceColumns),
+      columnPinning: buildDefaultColumnPinning(defaultPreferenceColumns),
+      columnSizing: buildDefaultColumnSizing(defaultPreferenceColumns),
     }),
-    [columns]
+    [defaultPreferenceColumns]
   )
 
   const initialUrlPresentRef = React.useRef(false)
@@ -1369,6 +1417,7 @@ export function DataGrid<TData extends RowData, TFilters>({
   >([])
   const [savedViewsLoading, setSavedViewsLoading] = React.useState(false)
   const [savedViewsError, setSavedViewsError] = React.useState<string | null>(null)
+  const [savedViewsHydrated, setSavedViewsHydrated] = React.useState(false)
 
   const savedViewsEnabled = enableSavedViews || Boolean(savedViewsAdapter)
 
@@ -1383,6 +1432,15 @@ export function DataGrid<TData extends RowData, TFilters>({
         ? savedViewsAdapter ?? localSavedViewsAdapter
         : null,
     [localSavedViewsAdapter, savedViewsAdapter, savedViewsEnabled]
+  )
+
+  const hydratedSavedViews = React.useMemo(
+    () =>
+      savedViews.map((view) => ({
+        ...view,
+        snapshot: hydrateDataGridViewSnapshot(view.snapshot, filterDefinitions),
+      })),
+    [filterDefinitions, savedViews]
   )
 
   React.useEffect(() => {
@@ -1457,6 +1515,7 @@ export function DataGrid<TData extends RowData, TFilters>({
   const loadSavedViews = React.useCallback(async () => {
     if (!effectiveSavedViewsAdapter) {
       setSavedViews([])
+      setSavedViewsHydrated(true)
       return
     }
 
@@ -1473,6 +1532,7 @@ export function DataGrid<TData extends RowData, TFilters>({
       )
     } finally {
       setSavedViewsLoading(false)
+      setSavedViewsHydrated(true)
     }
   }, [effectiveSavedViewsAdapter])
 
@@ -1482,29 +1542,33 @@ export function DataGrid<TData extends RowData, TFilters>({
 
   const applyViewSnapshot = React.useCallback(
     (snapshot: DataGridViewSnapshot<TFilters, DataGridSortState>) => {
-      setColumnVisibility(cloneSerializable(snapshot.columnVisibility ?? {}))
-      setColumnOrder(cloneSerializable(snapshot.columnOrder ?? []))
+      const hydratedSnapshot = hydrateDataGridViewSnapshot(snapshot, filterDefinitions)
+
+      setColumnVisibility(cloneSerializable(hydratedSnapshot.columnVisibility ?? {}))
+      setColumnOrder(cloneSerializable(hydratedSnapshot.columnOrder ?? []))
       setColumnPinning(
-        cloneSerializable(snapshot.columnPinning ?? { left: [], right: [] })
+        cloneSerializable(hydratedSnapshot.columnPinning ?? { left: [], right: [] })
       )
-      setColumnSizing(cloneSerializable(snapshot.columnSizing ?? {}))
-      onPageSizeChange(snapshot.pageSize)
-      onFiltersChange(cloneSerializable(snapshot.filters))
-      onSortingChange(cloneSerializable(snapshot.sorting))
+      setColumnSizing(cloneSerializable(hydratedSnapshot.columnSizing ?? {}))
+      onPageSizeChange(hydratedSnapshot.pageSize)
+      onFiltersChange(cloneSerializable(hydratedSnapshot.filters))
+      onSortingChange(cloneSerializable(hydratedSnapshot.sorting))
       onPageChange(1)
     },
-    [onFiltersChange, onPageChange, onPageSizeChange, onSortingChange]
+    [filterDefinitions, onFiltersChange, onPageChange, onPageSizeChange, onSortingChange]
   )
 
   const currentMatchingView = React.useMemo(
     () =>
-      savedViews.find((view) => isSnapshotEqual(view.snapshot, currentSnapshot)) ?? null,
-    [currentSnapshot, savedViews]
+      hydratedSavedViews.find((view) => isSnapshotEqual(view.snapshot, currentSnapshot)) ??
+      null,
+    [currentSnapshot, hydratedSavedViews]
   )
 
   React.useEffect(() => {
     if (
       !savedViewsEnabled ||
+      !savedViewsHydrated ||
       savedViewsLoading ||
       savedViewsError ||
       defaultViewAppliedRef.current
@@ -1518,7 +1582,7 @@ export function DataGrid<TData extends RowData, TFilters>({
       return
     }
 
-    const defaultView = savedViews.find((view) => view.isDefault)
+    const defaultView = hydratedSavedViews.find((view) => view.isDefault)
     if (!defaultView) {
       return
     }
@@ -1526,11 +1590,17 @@ export function DataGrid<TData extends RowData, TFilters>({
     applyViewSnapshot(defaultView.snapshot)
   }, [
     applyViewSnapshot,
-    savedViews,
+    hydratedSavedViews,
     savedViewsEnabled,
     savedViewsError,
+    savedViewsHydrated,
     savedViewsLoading,
   ])
+
+  const pageSizeOptions = React.useMemo(
+    () => buildPageSizeOptions(pageSize),
+    [pageSize]
+  )
 
   const handleCreateSavedView = React.useCallback(
     async (name: string) => {
@@ -1814,7 +1884,7 @@ export function DataGrid<TData extends RowData, TFilters>({
               <DataGridViewsPanel
                 currentSnapshot={currentSnapshot}
                 currentViewId={currentMatchingView?.id ?? null}
-                savedViews={savedViews}
+                savedViews={hydratedSavedViews}
                 isLoading={savedViewsLoading}
                 error={savedViewsError}
                 onApplyView={(view) => applyViewSnapshot(view.snapshot)}
@@ -2096,7 +2166,7 @@ export function DataGrid<TData extends RowData, TFilters>({
               onChange={(event) => onPageSizeChange(Number(event.target.value))}
               className="h-8 rounded-md border bg-background px-2 text-sm"
             >
-              {DEFAULT_PAGE_SIZES.map((option) => (
+              {pageSizeOptions.map((option) => (
                 <option key={option} value={option}>
                   {option}
                 </option>

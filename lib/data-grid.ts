@@ -528,6 +528,29 @@ export const writeDataGridSavedViews = <TFilters, TSort>(
   }
 }
 
+export function hydrateDataGridViewSnapshot<TFilters, TSort>(
+  snapshot: DataGridViewSnapshot<TFilters, TSort>,
+  filterDefinitions: Array<DataGridFilterDefinition<TFilters>>
+): DataGridViewSnapshot<TFilters, TSort> {
+  let hydratedFilters = snapshot.filters
+
+  for (const definition of filterDefinitions) {
+    if (definition.kind !== "date-range") {
+      continue
+    }
+
+    const nextValue = definition.getValue(hydratedFilters)
+    hydratedFilters = definition.setValue(hydratedFilters, nextValue as never)
+  }
+
+  return hydratedFilters === snapshot.filters
+    ? snapshot
+    : {
+        ...snapshot,
+        filters: hydratedFilters,
+      }
+}
+
 const buildInitialSnapshot = <TFilters, TSort>(
   initialFilters: TFilters,
   initialSorting: TSort,
