@@ -41,7 +41,7 @@ Public props/types and extension surface:
   - `custom`
 - `createDataGridStateCodec` and `DataGridStateCodec` for URL synchronization and custom codecs.
 - `DataGridColumnMeta` for column defaults:
-  - `pinnable`
+  - `pinnable` disables user pin/unpin controls for that column
   - `defaultPinned`
   - `defaultVisible`
   - `orderPriority`
@@ -51,6 +51,7 @@ Public props/types and extension surface:
 - `DataGridRowAction` and `DataGridBulkAction` types are provided for host-owned action models.
 - `useDataGridController` + `DataGridLoader` for remote-load driven tables.
 - `useDataGridController` also exposes `hasInitialUrlState` so host surfaces can preserve URL-over-saved-view precedence when composing a `DataGrid`.
+- `controller.setPageSize` resets pagination to page `1`, matching filter and sort changes.
 
 Saved views behavior:
 - Snapshot model includes filters, sorting, page size, and all column layout state (visibility/order/pinning/sizing).
@@ -327,6 +328,7 @@ Props:
 - `className`: Wrapper class override.
 - `id`: Optional id for the trigger button.
 - `numberOfMonths`: Number of months to show.
+- Dropdown navigation uses explicit broad bounds so future years remain reachable.
 - `clearable`: Shows a clear action when true.
 - `clearLabel`: Label for the clear action.
 - `triggerClassName`: Trigger button class override.

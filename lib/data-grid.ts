@@ -599,7 +599,7 @@ export function useDataGridController<TData, TFilters, TSort>({
     initialSnapshotRef.current.sorting
   )
   const [page, setPage] = React.useState(initialSnapshotRef.current.page)
-  const [pageSize, setPageSize] = React.useState(
+  const [pageSize, setPageSizeState] = React.useState(
     initialSnapshotRef.current.pageSize
   )
   const [totalCount, setTotalCount] = React.useState(0)
@@ -651,7 +651,7 @@ export function useDataGridController<TData, TFilters, TSort>({
     setFiltersState(parsed.filters ?? defaults.filters)
     setSortingState(parsed.sorting ?? defaults.sorting)
     setPage(parsed.page ?? defaults.page)
-    setPageSize(parsed.pageSize ?? defaults.pageSize)
+    setPageSizeState(parsed.pageSize ?? defaults.pageSize)
     setInitialUrlStateHydrated(true)
   }, [
     stateCodec,
@@ -707,7 +707,7 @@ export function useDataGridController<TData, TFilters, TSort>({
       setFiltersState(parsed.filters ?? initialControllerStateRef.current.filters)
       setSortingState(parsed.sorting ?? initialControllerStateRef.current.sorting)
       setPage(parsed.page ?? initialControllerStateRef.current.page)
-      setPageSize(parsed.pageSize ?? initialControllerStateRef.current.pageSize)
+      setPageSizeState(parsed.pageSize ?? initialControllerStateRef.current.pageSize)
     }
 
     window.addEventListener("popstate", handlePopState)
@@ -791,6 +791,11 @@ export function useDataGridController<TData, TFilters, TSort>({
   const setSorting = React.useCallback((nextSorting: TSort) => {
     setPage(1)
     setSortingState(nextSorting)
+  }, [])
+
+  const setPageSize = React.useCallback((nextPageSize: number) => {
+    setPage(1)
+    setPageSizeState(nextPageSize)
   }, [])
 
   const refresh = React.useCallback(() => {

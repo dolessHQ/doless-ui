@@ -537,26 +537,7 @@ function DataGridFilterBar<TFilters>({
     let cancelled = false
 
     const load = async () => {
-      const resolvedEntries = await Promise.all(
-        definitions.map(async (definition) => {
-          if (
-            definition.kind !== "single-select" &&
-            definition.kind !== "multi-select"
-          ) {
-            return [definition.id, []] as const
-          }
-
-          if (definition.options) {
-            return [definition.id, definition.options] as const
-          }
-
-          if (definition.loadOptions) {
-            return [definition.id, await definition.loadOptions()] as const
-          }
-
-          return [definition.id, []] as const
-        })
-      )
+      const resolvedEntries = await resolveFilterOptions(definitions)
 
       if (!cancelled) {
         setOptionState(Object.fromEntries(resolvedEntries))
@@ -833,6 +814,55 @@ function DataGridFilterBar<TFilters>({
     </div>
   )
 }
+
+export const resolveFilterOptions = async <TFilters,>(
+  definitions: Array<DataGridFilterDefinition<TFilters>>
+) =>
+  Promise.all(
+    definitions.map(async (definition) => {
+      if (
+        definition.kind !== "single-select" &&
+        definition.kind !== "multi-select"
+      ) {
+        return [definition.id, []] as const
+      }
+
+      if (definition.options) {
+        return [definition.id, definition.options] as const
+      }
+
+      if (definition.loadOptions) {
+        try {
+          return [definition.id, await definition.loadOptions()] as const
+        } catch (error) {
+          console.warn(
+            `Failed to load filter options for "${definition.id}"`,
+            error
+          )
+          return [definition.id, []] as const
+        }
+      }
+
+      return [definition.id, []] as const
+    })
+  )
+
+export const normalizePinnableColumns = <TData extends RowData>(
+  columns: Array<ColumnDef<TData, unknown>>
+) =>
+  columns.map((column) =>
+    column.meta?.pinnable === false
+      ? {
+          ...column,
+          enablePinning: false,
+        }
+      : column
+  )
+
+export const canUseUnpinControl = (
+  pinState: DataGridPinnedSide | false,
+  canPin: boolean
+) => Boolean(pinState) && canPin
 
 function DataGridViewsPanel<TFilters>({
   currentSnapshot,
@@ -1219,7 +1249,7 @@ function DataGridColumnPanel<TData extends RowData>({
                     <Button
                       variant="outline"
                       size="sm"
-                      disabled={!pinState}
+                      disabled={!canUseUnpinControl(pinState, column.getCanPin())}
                       onClick={() => column.pin(false)}
                     >
                       <PinOff className="size-4" />
@@ -1342,6 +1372,11 @@ export function DataGrid<TData extends RowData, TFilters>({
   mobilePinningBreakpoint = 1024,
   className,
 }: DataGridProps<TData, TFilters>) {
+  const normalizedColumns = React.useMemo<Array<ColumnDef<TData, unknown>>>(
+    () => normalizePinnableColumns(columns),
+    [columns]
+  )
+
   const defaultPreferenceColumns = React.useMemo<Array<ColumnDef<TData, unknown>>>(() => {
     const nextColumns: Array<ColumnDef<TData, unknown>> = []
 
@@ -1362,7 +1397,7 @@ export function DataGrid<TData extends RowData, TFilters>({
       })
     }
 
-    nextColumns.push(...columns)
+    nextColumns.push(...normalizedColumns)
 
     if (rowActions.length > 0) {
       nextColumns.push({
@@ -1382,7 +1417,7 @@ export function DataGrid<TData extends RowData, TFilters>({
     }
 
     return nextColumns
-  }, [bulkActions.length, columns, rowActions.length])
+  }, [bulkActions.length, normalizedColumns, rowActions.length])
 
   const defaultPreferences = React.useMemo<DataGridStoredPreferences>(
     () => ({
@@ -1731,7 +1766,7 @@ export function DataGrid<TData extends RowData, TFilters>({
       })
     }
 
-    nextColumns.push(...columns)
+    nextColumns.push(...normalizedColumns)
 
     if (rowActions.length > 0) {
       nextColumns.push({
@@ -1763,7 +1798,7 @@ export function DataGrid<TData extends RowData, TFilters>({
     }
 
     return nextColumns
-  }, [bulkActions.length, columns, rowActions, selectedRowIds])
+  }, [bulkActions.length, normalizedColumns, rowActions, selectedRowIds])
 
   const table = useReactTable({
     data: rows,

@@ -4,8 +4,10 @@ import * as React from "react"
 import { CalendarIcon, ChevronDownIcon } from "lucide-react"
 import { type DateRange } from "react-day-picker"
 import {
+  addYears,
   addMonths,
   addWeeks,
+  endOfYear,
   endOfMonth,
   endOfWeek,
   isAfter,
@@ -13,7 +15,9 @@ import {
   parseISO,
   startOfDay,
   startOfMonth,
+  startOfYear,
   startOfWeek,
+  subYears,
   subMonths,
   subWeeks,
 } from "date-fns"
@@ -307,6 +311,24 @@ export function DateRangePicker({
   const [visibleMonth, setVisibleMonth] = React.useState<Date>(() =>
     startOfMonth(defaultMonth)
   )
+  const navigationStartMonth = React.useMemo(() => {
+    const candidateYears = [
+      startOfYear(subYears(today, 100)).getFullYear(),
+      parsedInitialFrom?.getFullYear(),
+      parsedInitialTo?.getFullYear(),
+    ].filter((year): year is number => typeof year === "number")
+
+    return new Date(Math.min(...candidateYears), 0, 1)
+  }, [parsedInitialFrom, parsedInitialTo, today])
+  const navigationEndMonth = React.useMemo(() => {
+    const candidateYears = [
+      endOfYear(addYears(today, 25)).getFullYear(),
+      parsedInitialFrom?.getFullYear(),
+      parsedInitialTo?.getFullYear(),
+    ].filter((year): year is number => typeof year === "number")
+
+    return new Date(Math.max(...candidateYears), 11, 31)
+  }, [parsedInitialFrom, parsedInitialTo, today])
 
   const clearSelection = React.useCallback(() => {
     setRange(undefined)
@@ -664,8 +686,8 @@ export function DateRangePicker({
                 onSelect={handleSelect}
                 numberOfMonths={monthsToShow}
                 captionLayout="dropdown"
-                fromYear={2020}
-                toYear={2030}
+                startMonth={navigationStartMonth}
+                endMonth={navigationEndMonth}
               />
             </CardContent>
             <CardFooter className="-mb-2 flex-col pt-2">
